@@ -565,6 +565,7 @@ std::vector<odu::du_cell_config> ocudu::generate_du_cell_config(const du_high_un
     // > MIB
     out_cell.cell_barred            = base_cell.cell_barred;
     out_cell.intra_freq_reselection = base_cell.intra_freq_reselection;
+    out_cell.enable_redcap          = base_cell.enable_redcap;
 
     // > PLMN/TAC/NCI.
     out_cell.nr_cgi.plmn_id = plmn_identity::parse(base_cell.plmn).value();

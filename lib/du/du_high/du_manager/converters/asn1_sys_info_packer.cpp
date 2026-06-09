@@ -503,6 +503,25 @@ static asn1::rrc_nr::sib1_s make_asn1_rrc_cell_sib1(const du_cell_config& du_cfg
     sib1.non_crit_ext.non_crit_ext.non_crit_ext.edrx_allowed_idle_r17_present = true;
   }
 
+  if (du_cfg.enable_redcap) {
+    sib1.non_crit_ext_present                           = true;
+    sib1.non_crit_ext.non_crit_ext_present              = true;
+    sib1.non_crit_ext.non_crit_ext.non_crit_ext_present = true;
+    auto& v1700 = sib1.non_crit_ext.non_crit_ext.non_crit_ext;
+
+    // RedCapConfigCommonSIB-r17: mark the cell as not barred for 1-Rx and 2-Rx RedCap UEs.
+    v1700.red_cap_cfg_common_r17_present                         = true;
+    v1700.red_cap_cfg_common_r17.cell_barred_red_cap_r17_present = true;
+    v1700.red_cap_cfg_common_r17.cell_barred_red_cap_r17.cell_barred_red_cap1_rx_r17 =
+        red_cap_cfg_common_sib_r17_s::cell_barred_red_cap_r17_s_::cell_barred_red_cap1_rx_r17_opts::not_barred;
+    v1700.red_cap_cfg_common_r17.cell_barred_red_cap_r17.cell_barred_red_cap2_rx_r17 =
+        red_cap_cfg_common_sib_r17_s::cell_barred_red_cap_r17_s_::cell_barred_red_cap2_rx_r17_opts::not_barred;
+
+    // Allow intra-frequency reselection for RedCap UEs.
+    v1700.intra_freq_resel_red_cap_r17_present = true;
+    v1700.intra_freq_resel_red_cap_r17         = sib1_v1700_ies_s::intra_freq_resel_red_cap_r17_opts::allowed;
+  }
+
   return sib1;
 }
 

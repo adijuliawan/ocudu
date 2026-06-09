@@ -35,6 +35,8 @@ struct du_cell_config {
   bool cell_barred = false;
   /// MIB intraFreqReselection field (TS 38.331): true=allowed, false=notAllowed.
   bool intra_freq_reselection = true;
+  /// Broadcast Rel-17 RedCapConfigCommonSIB in SIB1 (cellBarredRedCap=notBarred) so RedCap UEs may camp. TS 38.331.
+  bool enable_redcap = false;
 
   /// Information for UE cell access and SI scheduling.
   si_acquisition_info si;

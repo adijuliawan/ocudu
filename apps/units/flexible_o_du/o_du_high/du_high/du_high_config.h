@@ -1098,6 +1098,8 @@ struct du_high_unit_base_cell_config {
   bool cell_barred = false;
   /// MIB intraFreqReselection field (TS 38.331): if true, intra-frequency cell reselection is allowed when barred.
   bool intra_freq_reselection = true;
+  /// Broadcast Rel-17 RedCapConfigCommonSIB in SIB1 (cellBarredRedCap=notBarred) so RedCap UEs may camp. TS 38.331.
+  bool enable_redcap = false;
   /// \c q-RxLevMin, part of \c cellSelectionInfo, \c SIB1, TS 38.331, in dBm.
   int q_rx_lev_min = -70;
   /// \c q-QualMin, part of \c cellSelectionInfo, \c SIB1, TS 38.331, in dB.

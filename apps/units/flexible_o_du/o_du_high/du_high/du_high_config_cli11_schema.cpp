@@ -2350,6 +2350,11 @@ static void configure_cli11_common_cell_args(CLI::App& app, du_high_unit_base_ce
              "MIB intraFreqReselection: if true, intra-frequency cell reselection is allowed when cell is barred")
       ->capture_default_str();
   add_option(app,
+             "--enable_redcap",
+             cell_params.enable_redcap,
+             "Broadcast Rel-17 RedCap support in SIB1 so RedCap UEs can camp on this cell")
+      ->capture_default_str();
+  add_option(app,
              "--q_rx_lev_min",
              cell_params.q_rx_lev_min,
              "q-RxLevMin, required minimum received RSRP level for cell selection/re-selection, in dBm")
