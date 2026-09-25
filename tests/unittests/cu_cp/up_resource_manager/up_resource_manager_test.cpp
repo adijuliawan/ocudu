@@ -236,7 +236,7 @@ static unsigned nof_default_drbs(const std::map<drb_id_t, up_drb_context>& drbs)
 
 TEST_F(up_resource_manager_test, when_pdu_session_setup_with_two_qos_flows_only_first_drb_is_default)
 {
-  cu_cp_pdu_session_resource_setup_request msg = generate_pdu_session_resource_setup(ue_index_t::min, 1, 2);
+  ngap_pdu_session_resource_setup_request msg = generate_pdu_session_resource_setup(cu_cp_ue_index_t::min, 1, 2);
   ASSERT_TRUE(manager.validate_request(msg.pdu_session_res_setup_items));
   up_config_update update = manager.calculate_update(msg.pdu_session_res_setup_items);
 
@@ -256,7 +256,7 @@ TEST_F(up_resource_manager_test, when_pdu_session_setup_with_two_qos_flows_only_
 
 TEST_F(up_resource_manager_test, when_two_pdu_sessions_are_set_up_each_has_one_default_drb)
 {
-  cu_cp_pdu_session_resource_setup_request msg = generate_pdu_session_resource_setup(ue_index_t::min, 2, 2);
+  ngap_pdu_session_resource_setup_request msg = generate_pdu_session_resource_setup(cu_cp_ue_index_t::min, 2, 2);
   ASSERT_TRUE(manager.validate_request(msg.pdu_session_res_setup_items));
   up_config_update update = manager.calculate_update(msg.pdu_session_res_setup_items);
 
@@ -272,9 +272,9 @@ TEST_F(up_resource_manager_test, when_second_pdu_session_is_set_up_later_its_fir
   // Preamble.
   setup_initial_pdu_session();
 
-  const auto                               psi = uint_to_pdu_session_id(2);
-  cu_cp_pdu_session_resource_setup_request msg =
-      generate_pdu_session_resource_setup(ue_index_t::min, psi, uint_to_qos_flow_id(1));
+  const auto                              psi = uint_to_pdu_session_id(2);
+  ngap_pdu_session_resource_setup_request msg =
+      generate_pdu_session_resource_setup(cu_cp_ue_index_t::min, psi, uint_to_qos_flow_id(1));
   ASSERT_TRUE(manager.validate_request(msg.pdu_session_res_setup_items));
   up_config_update update = manager.calculate_update(msg.pdu_session_res_setup_items);
 
@@ -285,8 +285,8 @@ TEST_F(up_resource_manager_test, when_second_pdu_session_is_set_up_later_its_fir
 TEST_F(up_resource_manager_test, when_setup_requests_more_qos_flows_than_max_drbs_only_max_drbs_are_added)
 {
   // One PDU session with more QoS flows than DRBs allowed per UE.
-  cu_cp_pdu_session_resource_setup_request msg =
-      generate_pdu_session_resource_setup(ue_index_t::min, 1, cfg.max_nof_drbs_per_ue + 1);
+  ngap_pdu_session_resource_setup_request msg =
+      generate_pdu_session_resource_setup(cu_cp_ue_index_t::min, 1, cfg.max_nof_drbs_per_ue + 1);
   ASSERT_TRUE(manager.validate_request(msg.pdu_session_res_setup_items));
   up_config_update update = manager.calculate_update(msg.pdu_session_res_setup_items);
 
@@ -297,8 +297,9 @@ TEST_F(up_resource_manager_test, when_setup_requests_more_qos_flows_than_max_drb
 TEST_F(up_resource_manager_test, when_two_pdu_sessions_request_more_qos_flows_than_max_drbs_only_max_drbs_are_added)
 {
   // Two PDU sessions whose QoS flows together exceed the DRBs allowed per UE.
-  const unsigned                           nof_flows = cfg.max_nof_drbs_per_ue / 2 + 1;
-  cu_cp_pdu_session_resource_setup_request msg       = generate_pdu_session_resource_setup(ue_index_t::min, 2, nof_flows);
+  const unsigned                          nof_flows = cfg.max_nof_drbs_per_ue / 2 + 1;
+  ngap_pdu_session_resource_setup_request msg =
+      generate_pdu_session_resource_setup(cu_cp_ue_index_t::min, 2, nof_flows);
   ASSERT_TRUE(manager.validate_request(msg.pdu_session_res_setup_items));
   up_config_update update = manager.calculate_update(msg.pdu_session_res_setup_items);
 
@@ -314,8 +315,8 @@ TEST_F(up_resource_manager_test, when_pdu_session_gets_modified_new_drb_is_not_d
   // Preamble.
   setup_initial_pdu_session();
 
-  cu_cp_pdu_session_resource_modify_request msg = generate_pdu_session_resource_modification();
-  const auto                                psi = uint_to_pdu_session_id(1);
+  ngap_pdu_session_resource_modify_request msg = generate_pdu_session_resource_modification();
+  const auto                               psi = uint_to_pdu_session_id(1);
   ASSERT_TRUE(manager.validate_request(msg));
   up_config_update update = manager.calculate_update(msg);
 
