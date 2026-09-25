@@ -52,6 +52,26 @@ static bool is_drb_id_free(const up_context&                    context,
          !contains_drb(new_session_context, drb_id) && !context.used_drb_ids[get_used_drb_index(drb_id)];
 }
 
+/// Verifies if the PDU session already has a default DRB, either in the current context or among the DRBs to be added.
+static bool has_default_drb(const up_pdu_session_context_update& new_session_context, const up_context& context)
+{
+  auto session_it = context.pdu_sessions.find(new_session_context.id);
+  if (session_it != context.pdu_sessions.end()) {
+    for (const auto& drb : session_it->second.drbs) {
+      if (drb.second.default_drb) {
+        return true;
+      }
+    }
+  }
+
+  for (const auto& drb : new_session_context.drb_to_add) {
+    if (drb.second.default_drb) {
+      return true;
+    }
+  }
+  return false;
+}
+
 drb_id_t ocudu::ocucp::allocate_drb_id(const up_pdu_session_context_update& new_session_context,
                                        const up_context&                    context,
                                        const up_config_update&              config_update,
@@ -233,8 +253,10 @@ static drb_id_t allocate_qos_flow(up_pdu_session_context_update&     new_session
   up_drb_context drb_ctx;
   drb_ctx.drb_id                  = drb_id;
   drb_ctx.pdu_session_id          = new_session_context.id;
-  drb_ctx.default_drb             = full_context.drb_map.empty(); // make first DRB the default
   drb_ctx.source_drb_id_confirmed = preferred_drb_id.has_value() && drb_id == preferred_drb_id.value();
+  // Make the first DRB of the PDU session the default. As per TS 38.331 SDAP-Config, at most one DRB per PDU session
+  // may be the default one.
+  drb_ctx.default_drb = !has_default_drb(new_session_context, full_context);
 
   // Fill QoS (TODO: derive QoS params correctly).
   // As we currently map QoS flows to DRBs in a 1:1 manner, we can use the same values for both.

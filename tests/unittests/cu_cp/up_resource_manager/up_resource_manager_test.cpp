@@ -221,6 +221,88 @@ TEST_F(up_resource_manager_test, when_preferred_drb_id_is_already_taken_allocati
   EXPECT_FALSE(drb_to_add.at(uint_to_drb_id(2)).source_drb_id_confirmed);
 }
 
+/// Counts the DRBs marked as default, checking that the SDAP config agrees with the DRB context.
+static unsigned nof_default_drbs(const std::map<drb_id_t, up_drb_context>& drbs)
+{
+  unsigned count = 0;
+  for (const auto& drb : drbs) {
+    EXPECT_EQ(drb.second.default_drb, drb.second.sdap_cfg.default_drb);
+    if (drb.second.default_drb) {
+      count++;
+    }
+  }
+  return count;
+}
+
+TEST_F(up_resource_manager_test, when_pdu_session_setup_with_two_qos_flows_only_first_drb_is_default)
+{
+  cu_cp_pdu_session_resource_setup_request msg = generate_pdu_session_resource_setup(ue_index_t::min, 1, 2);
+  ASSERT_TRUE(manager.validate_request(msg.pdu_session_res_setup_items));
+  up_config_update update = manager.calculate_update(msg.pdu_session_res_setup_items);
+
+  // TS 38.331 SDAP-Config: at most one DRB per PDU session may be the default one.
+  const auto  psi        = uint_to_pdu_session_id(1);
+  const auto& drb_to_add = update.pdu_sessions_to_setup_list.at(psi).drb_to_add;
+  ASSERT_EQ(drb_to_add.size(), 2);
+  ASSERT_EQ(nof_default_drbs(drb_to_add), 1);
+  ASSERT_TRUE(drb_to_add.at(uint_to_drb_id(1)).default_drb);
+
+  // Assume DRB setup was successful.
+  up_config_update_result result;
+  result.pdu_sessions_added_list.push_back(update.pdu_sessions_to_setup_list.at(psi));
+  manager.apply_config_update(result);
+  ASSERT_EQ(nof_default_drbs(manager.get_pdu_session_context(psi).drbs), 1);
+}
+
+TEST_F(up_resource_manager_test, when_two_pdu_sessions_are_set_up_each_has_one_default_drb)
+{
+  cu_cp_pdu_session_resource_setup_request msg = generate_pdu_session_resource_setup(ue_index_t::min, 2, 2);
+  ASSERT_TRUE(manager.validate_request(msg.pdu_session_res_setup_items));
+  up_config_update update = manager.calculate_update(msg.pdu_session_res_setup_items);
+
+  ASSERT_EQ(update.pdu_sessions_to_setup_list.size(), 2);
+  for (const auto& session : update.pdu_sessions_to_setup_list) {
+    ASSERT_EQ(session.second.drb_to_add.size(), 2);
+    ASSERT_EQ(nof_default_drbs(session.second.drb_to_add), 1);
+  }
+}
+
+TEST_F(up_resource_manager_test, when_second_pdu_session_is_set_up_later_its_first_drb_is_default)
+{
+  // Preamble.
+  setup_initial_pdu_session();
+
+  const auto                               psi = uint_to_pdu_session_id(2);
+  cu_cp_pdu_session_resource_setup_request msg =
+      generate_pdu_session_resource_setup(ue_index_t::min, psi, uint_to_qos_flow_id(1));
+  ASSERT_TRUE(manager.validate_request(msg.pdu_session_res_setup_items));
+  up_config_update update = manager.calculate_update(msg.pdu_session_res_setup_items);
+
+  ASSERT_EQ(update.pdu_sessions_to_setup_list.at(psi).drb_to_add.size(), 1);
+  ASSERT_EQ(nof_default_drbs(update.pdu_sessions_to_setup_list.at(psi).drb_to_add), 1);
+}
+
+TEST_F(up_resource_manager_test, when_pdu_session_gets_modified_new_drb_is_not_default)
+{
+  // Preamble.
+  setup_initial_pdu_session();
+
+  cu_cp_pdu_session_resource_modify_request msg = generate_pdu_session_resource_modification();
+  const auto                                psi = uint_to_pdu_session_id(1);
+  ASSERT_TRUE(manager.validate_request(msg));
+  up_config_update update = manager.calculate_update(msg);
+
+  ASSERT_EQ(update.pdu_sessions_to_modify_list.at(psi).drb_to_add.size(), 1);
+  ASSERT_EQ(nof_default_drbs(update.pdu_sessions_to_modify_list.at(psi).drb_to_add), 0);
+
+  // Apply update, the PDU session still has one default DRB.
+  up_config_update_result result;
+  result.pdu_sessions_modified_list.push_back(update.pdu_sessions_to_modify_list.at(psi));
+  manager.apply_config_update(result);
+  ASSERT_EQ(manager.get_nof_drbs(), 2);
+  ASSERT_EQ(nof_default_drbs(manager.get_pdu_session_context(psi).drbs), 1);
+}
+
 TEST_F(up_resource_manager_test, when_pdu_session_gets_modified_new_drb_is_set_up)
 {
   // Preamble.
