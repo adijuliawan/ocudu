@@ -52,6 +52,21 @@ static bool is_drb_id_free(const up_context&                    context,
          !contains_drb(new_session_context, drb_id) && !context.used_drb_ids[get_used_drb_index(drb_id)];
 }
 
+/// Counts the DRBs of the UE, both in the current context and to be added by the update being calculated.
+static size_t get_nof_drbs(const up_pdu_session_context_update& new_session_context,
+                           const up_context&                    context,
+                           const up_config_update&              config_update)
+{
+  size_t nof_drbs = context.drb_map.size() + new_session_context.drb_to_add.size();
+  for (const auto& setup_item : config_update.pdu_sessions_to_setup_list) {
+    nof_drbs += setup_item.second.drb_to_add.size();
+  }
+  for (const auto& modify_item : config_update.pdu_sessions_to_modify_list) {
+    nof_drbs += modify_item.second.drb_to_add.size();
+  }
+  return nof_drbs;
+}
+
 /// Verifies if the PDU session already has a default DRB, either in the current context or among the DRBs to be added.
 static bool has_default_drb(const up_pdu_session_context_update& new_session_context, const up_context& context)
 {
@@ -79,7 +94,7 @@ drb_id_t ocudu::ocucp::allocate_drb_id(const up_pdu_session_context_update& new_
                                        const ocudulog::basic_logger&        logger,
                                        std::optional<drb_id_t>              preferred_drb_id)
 {
-  if (context.drb_map.size() >= max_nof_drbs_per_ue) {
+  if (get_nof_drbs(new_session_context, context, config_update) >= max_nof_drbs_per_ue) {
     logger.warning("DRB creation failed. Cause: Maximum number of DRBs per UE already created ({}). To increase the "
                    "number of allowed DRBs per UE change the \"--max_nof_drbs_per_ue\" in the CU-CP configuration\n",
                    max_nof_drbs_per_ue);
@@ -236,7 +251,7 @@ static drb_id_t allocate_qos_flow(up_pdu_session_context_update&     new_session
 
   // Note: We map QoS flows to DRBs in a 1:1 manner meaning that each flow gets it's own DRB.
   // potential optimization to support more QoS flows is to map non-GPB flows onto existing DRBs.
-  if (full_context.drb_map.size() >= cfg.max_nof_drbs_per_ue) {
+  if (get_nof_drbs(new_session_context, full_context, config_update) >= cfg.max_nof_drbs_per_ue) {
     logger.warning("DRB creation failed. Cause: Maximum number of DRBs per UE already created ({}). To increase the "
                    "number of allowed DRBs per UE change the \"--max_nof_drbs_per_ue\" in the CU-CP configuration",
                    cfg.max_nof_drbs_per_ue);
