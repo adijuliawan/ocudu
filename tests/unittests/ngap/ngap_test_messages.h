@@ -227,6 +227,14 @@ ngap_message generate_valid_pdu_session_resource_modify_request_message(
     const std::vector<qos_flow_id_t>& qos_flow_add_or_modify_list = {uint_to_qos_flow_id(1)},
     const std::vector<qos_flow_id_t>& qos_flow_to_release_list    = {});
 
+/// \brief Generate a valid dummy PDU Session Resource Modify Request Message that adds a GBR QoS flow (5QI 1) with the
+/// GBR QoS Flow Information IE set.
+ngap_message generate_valid_pdu_session_resource_modify_request_with_gbr_qos_flow_message(
+    amf_ue_id_t      amf_ue_id,
+    ran_ue_id_t      ran_ue_id,
+    pdu_session_id_t pdu_session_id,
+    qos_flow_id_t    qos_flow_id);
+
 /// \brief Generate an invalid dummy PDU Session Resource Modify Request Message.
 ngap_message generate_invalid_pdu_session_resource_modify_request_message(amf_ue_id_t      amf_ue_id,
                                                                           ran_ue_id_t      ran_ue_id,

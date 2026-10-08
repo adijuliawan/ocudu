@@ -125,6 +125,44 @@ TEST_F(ngap_pdu_session_resource_modify_procedure_test,
   ASSERT_TRUE(was_pdu_session_resource_modify_request_valid());
 }
 
+/// Test that the GBR QoS Flow Information of a QoS flow added by a PDU Session Resource Modify Request is forwarded.
+TEST_F(ngap_pdu_session_resource_modify_procedure_test,
+       when_pdu_session_resource_modify_request_adds_gbr_qos_flow_then_gbr_qos_flow_information_is_forwarded)
+{
+  // Test preamble
+  pdu_session_id_t pdu_session_id = uint_to_pdu_session_id(
+      test_rng::uniform_int<uint16_t>(to_underlying(pdu_session_id_t::min), to_underlying(pdu_session_id_t::max)));
+  cu_cp_ue_index_t ue_index = this->start_procedure(pdu_session_id);
+  auto&            ue       = test_ues.at(ue_index);
+
+  // Inject PDU Session Resource Modify Request adding a GBR QoS flow
+  qos_flow_id_t qos_flow_id                         = uint_to_qos_flow_id(2);
+  ngap_message  pdu_session_resource_modify_request =
+      generate_valid_pdu_session_resource_modify_request_with_gbr_qos_flow_message(
+          ue.amf_ue_id.value(), ue.ran_ue_id.value(), pdu_session_id, qos_flow_id);
+  ngap->handle_message(pdu_session_resource_modify_request);
+
+  // Check conversion in adapter
+  ASSERT_TRUE(was_conversion_successful(pdu_session_resource_modify_request, pdu_session_id));
+
+  // Check that the QoS flow level QoS parameters, including the GBR QoS Flow Information, were forwarded
+  const auto& modify_item = cu_cp_notifier.last_modify_request.pdu_session_res_modify_items[pdu_session_id];
+  ASSERT_TRUE(modify_item.transfer.qos_flow_add_or_modify_request_list.contains(qos_flow_id));
+  const qos_flow_level_qos_parameters& qos_params =
+      modify_item.transfer.qos_flow_add_or_modify_request_list[qos_flow_id].qos_flow_level_qos_params;
+  ASSERT_FALSE(qos_params.qos_desc.is_dyn_5qi());
+  ASSERT_EQ(qos_params.qos_desc.get_5qi(), uint_to_five_qi(1));
+  ASSERT_EQ(qos_params.alloc_retention_prio.prio_level_arp, 1);
+  ASSERT_TRUE(qos_params.gbr_qos_info.has_value());
+  ASSERT_EQ(qos_params.gbr_qos_info->max_br_dl, 41000);
+  ASSERT_EQ(qos_params.gbr_qos_info->max_br_ul, 49000);
+  ASSERT_EQ(qos_params.gbr_qos_info->gbr_dl, 41000);
+  ASSERT_EQ(qos_params.gbr_qos_info->gbr_ul, 49000);
+
+  // Check that PDU Session Resource Modify Request was valid
+  ASSERT_TRUE(was_pdu_session_resource_modify_request_valid());
+}
+
 /// Test invalid PDU Session Resource Modify Request
 TEST_F(ngap_pdu_session_resource_modify_procedure_test,
        when_invalid_pdu_session_resource_modify_request_received_then_pdu_session_modification_failed)

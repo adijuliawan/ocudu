@@ -813,6 +813,59 @@ ngap_message ocudu::ocucp::generate_valid_pdu_session_resource_modify_request_me
   return ngap_msg;
 }
 
+ngap_message ocudu::ocucp::generate_valid_pdu_session_resource_modify_request_with_gbr_qos_flow_message(
+    amf_ue_id_t      amf_ue_id,
+    ran_ue_id_t      ran_ue_id,
+    pdu_session_id_t pdu_session_id,
+    qos_flow_id_t    qos_flow_id)
+{
+  ngap_message ngap_msg = generate_pdu_session_resource_modify_request_base(amf_ue_id, ran_ue_id);
+
+  auto& pdu_session_res_modify_req = ngap_msg.pdu.init_msg().value.pdu_session_res_modify_request();
+
+  pdu_session_res_modify_item_mod_req_s pdu_session_res_item;
+
+  pdu_session_res_item.pdu_session_id = to_underlying(pdu_session_id);
+
+  // Fill PDU session resource modify request transfer.
+  asn1::ngap::pdu_session_res_modify_request_transfer_s pdu_session_res_modify_request_transfer;
+  {
+    pdu_session_res_modify_request_transfer->qos_flow_add_or_modify_request_list_present = true;
+
+    asn1::ngap::qos_flow_add_or_modify_request_item_s qos_flow_add_item;
+
+    // Fill QoS flow identifier.
+    qos_flow_add_item.qos_flow_id = to_underlying(qos_flow_id);
+
+    // Fill QoS characteristics.
+    qos_flow_add_item.qos_flow_level_qos_params_present = true;
+    qos_flow_add_item.qos_flow_level_qos_params.qos_characteristics.set_non_dyn5qi();
+    qos_flow_add_item.qos_flow_level_qos_params.qos_characteristics.non_dyn5qi().five_qi = 1;
+
+    // Fill allocation and retention priority.
+    qos_flow_add_item.qos_flow_level_qos_params.alloc_and_retention_prio.prio_level_arp = 1;
+    qos_flow_add_item.qos_flow_level_qos_params.alloc_and_retention_prio.pre_emption_cap =
+        asn1::ngap::pre_emption_cap_opts::shall_not_trigger_pre_emption;
+    qos_flow_add_item.qos_flow_level_qos_params.alloc_and_retention_prio.pre_emption_vulnerability =
+        asn1::ngap::pre_emption_vulnerability_opts::not_pre_emptable;
+
+    // Fill GBR QoS flow information.
+    qos_flow_add_item.qos_flow_level_qos_params.gbr_qos_info_present                     = true;
+    qos_flow_add_item.qos_flow_level_qos_params.gbr_qos_info.max_flow_bit_rate_dl        = 41000;
+    qos_flow_add_item.qos_flow_level_qos_params.gbr_qos_info.max_flow_bit_rate_ul        = 49000;
+    qos_flow_add_item.qos_flow_level_qos_params.gbr_qos_info.guaranteed_flow_bit_rate_dl = 41000;
+    qos_flow_add_item.qos_flow_level_qos_params.gbr_qos_info.guaranteed_flow_bit_rate_ul = 49000;
+
+    pdu_session_res_modify_request_transfer->qos_flow_add_or_modify_request_list.push_back(qos_flow_add_item);
+  }
+
+  pdu_session_res_item.pdu_session_res_modify_request_transfer = pack_into_pdu(pdu_session_res_modify_request_transfer);
+
+  pdu_session_res_modify_req->pdu_session_res_modify_list_mod_req.push_back(pdu_session_res_item);
+
+  return ngap_msg;
+}
+
 ngap_message ocudu::ocucp::generate_invalid_pdu_session_resource_modify_request_message(amf_ue_id_t      amf_ue_id,
                                                                                         ran_ue_id_t      ran_ue_id,
                                                                                         pdu_session_id_t pdu_session_id)
