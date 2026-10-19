@@ -4,7 +4,10 @@
 
 #include "rrc_ue_test_helpers.h"
 #include "rrc_ue_test_messages.h"
+#include "lib/rrc/ue/rrc_asn1_helpers.h"
+#include "tests/test_doubles/rrc/rrc_test_messages.h"
 #include "ocudu/adt/format.h"
+#include "ocudu/asn1/rrc_nr/rrc_nr.h"
 #include "ocudu/support/async/async_test_utils.h"
 #include <gtest/gtest.h>
 
@@ -89,4 +92,40 @@ TEST_F(rrc_ue_capability_transfer_proc_test,
   receive_ue_capability_information(2);
 
   ASSERT_TRUE(t.ready());
+}
+
+/// Packs a UERadioAccessCapabilityInformation, as the AMF passes it in the NGAP UE Radio Capability IE.
+static byte_buffer create_packed_ue_radio_access_cap_info(bool rrc_inactive_supported)
+{
+  asn1::rrc_nr::ul_dcch_msg_s ue_cap_info = test_helpers::create_ue_capability_info(0, rrc_inactive_supported);
+  const auto&                 ue_cap_rat_container_list =
+      ue_cap_info.msg.c1().ue_cap_info().crit_exts.ue_cap_info().ue_cap_rat_container_list;
+
+  byte_buffer   packed_list;
+  asn1::bit_ref bref{packed_list};
+  report_fatal_error_if_not(asn1::pack_dyn_seq_of(bref, ue_cap_rat_container_list, 0, 8) == asn1::OCUDUASN_SUCCESS,
+                            "Failed to pack UE Capability RAT Container List");
+
+  asn1::rrc_nr::ue_radio_access_cap_info_s ue_radio_access_cap_info;
+  ue_radio_access_cap_info.crit_exts.set_c1().set_ue_radio_access_cap_info().ue_radio_access_cap_info =
+      std::move(packed_list);
+  return pack_into_pdu(ue_radio_access_cap_info, "UE Radio Access Cap Info");
+}
+
+TEST_F(rrc_ue_capability_transfer_proc_test,
+       when_capabilities_are_stored_from_ngap_with_inactive_state_then_rrc_inactive_is_supported)
+{
+  ASSERT_FALSE(rrc_ue->is_rrc_inactive_supported());
+
+  ASSERT_TRUE(rrc_ue->store_ue_capabilities(create_packed_ue_radio_access_cap_info(true)));
+
+  ASSERT_TRUE(rrc_ue->is_rrc_inactive_supported());
+}
+
+TEST_F(rrc_ue_capability_transfer_proc_test,
+       when_capabilities_are_stored_from_ngap_without_inactive_state_then_rrc_inactive_is_not_supported)
+{
+  ASSERT_TRUE(rrc_ue->store_ue_capabilities(create_packed_ue_radio_access_cap_info(false)));
+
+  ASSERT_FALSE(rrc_ue->is_rrc_inactive_supported());
 }
