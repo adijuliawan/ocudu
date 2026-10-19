@@ -905,6 +905,13 @@ bool rrc_ue_impl::store_ue_capabilities(byte_buffer ue_capabilities)
 
   context.capabilities_list.emplace(ue_cap_rat_container_list);
 
+  // Parse UE capabilities, so capability checks (e.g. RRC Inactive support) work when the AMF provided them and no
+  // UE Capability Enquiry is sent.
+  if (std::optional<rrc_ue_capabilities_t> caps = get_capabilities(ue_cap_rat_container_list, logger);
+      caps.has_value()) {
+    context.capabilities = caps.value();
+  }
+
   if (logger.get_basic_logger().debug.enabled()) {
     logger.log_debug("UE Capabilities:\n");
     asn1::json_writer json_writer;
