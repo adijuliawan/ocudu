@@ -97,6 +97,26 @@ protected:
     return req;
   }
 
+  /// Builds a request to set up non-GBR DRBs in the given order.
+  static f1ap_ue_context_update_request drb_creation_req(du_ue_index_t ue_index, const std::vector<drb_id_t>& drb_ids)
+  {
+    f1ap_ue_context_update_request req;
+    req.ue_index = ue_index;
+
+    for (drb_id_t drb_id : drb_ids) {
+      f1ap_drb_to_setup& drb = req.drbs_to_setup.emplace_back();
+      drb.drb_id             = drb_id;
+      // The default QoS configuration of 5QI 9, a non-GBR 5QI, uses the AM RLC mode.
+      drb.mode        = rlc_mode::am;
+      drb.pdcp_sn_len = pdcp_sn_size::size18bits;
+      drb.uluptnl_info_list.push_back(up_transport_layer_info{transport_layer_address::create_from_string("127.0.0.1"),
+                                                              int_to_gtpu_teid(static_cast<unsigned>(drb_id))});
+      drb.qos_info.drb_qos.qos_desc = non_dyn_5qi_descriptor{uint_to_five_qi(9), {}, {}, {}};
+    }
+
+    return req;
+  }
+
   unsigned get_config_sr_period() const
   {
     return sr_periodicity_to_slot(default_ue_cell_cfg.ul_config->init_ul_bwp.pucch_cfg->sr_res_list[0].period);
@@ -265,6 +285,56 @@ TEST_P(du_ran_resource_manager_tester, when_gbr_drb_has_gbr_qos_information_then
 
   ASSERT_TRUE(resp.failed_drbs.empty());
   ASSERT_TRUE(ue_res->value().drbs.contains(drb_id_t::drb1));
+}
+
+TEST_P(du_ran_resource_manager_tester, when_drbs_are_set_up_again_in_another_order_then_they_keep_their_lcids)
+{
+  // The UE sets up DRB1 and DRB2 in two procedures, as for two PDU sessions.
+  const du_ue_index_t           ue_idx1 = to_du_ue_index(0);
+  ue_ran_resource_configurator* ue_res1 = create_ue(ue_idx1);
+  ASSERT_NE(ue_res1, nullptr);
+  ASSERT_FALSE(ue_res1->update(to_du_cell_index(0), srb1_creation_req(ue_idx1)).failed());
+  ASSERT_TRUE(ue_res1->update(to_du_cell_index(0), drb_creation_req(ue_idx1, {drb_id_t::drb1})).failed_drbs.empty());
+  ASSERT_TRUE(ue_res1->update(to_du_cell_index(0), drb_creation_req(ue_idx1, {drb_id_t::drb2})).failed_drbs.empty());
+
+  // On resume, the CU-CP sets up both DRBs again in a single request, in another order.
+  const du_ue_index_t           ue_idx2 = to_du_ue_index(1);
+  ue_ran_resource_configurator* ue_res2 = create_ue(ue_idx2);
+  ASSERT_NE(ue_res2, nullptr);
+  ASSERT_FALSE(ue_res2->update(to_du_cell_index(0), srb1_creation_req(ue_idx2)).failed());
+  ASSERT_TRUE(ue_res2->update(to_du_cell_index(0), drb_creation_req(ue_idx2, {drb_id_t::drb2, drb_id_t::drb1}))
+                  .failed_drbs.empty());
+
+  ASSERT_EQ(ue_res1->value().drbs[drb_id_t::drb1].lcid, LCID_MIN_DRB);
+  ASSERT_EQ(ue_res2->value().drbs[drb_id_t::drb1].lcid, ue_res1->value().drbs[drb_id_t::drb1].lcid);
+  ASSERT_EQ(ue_res2->value().drbs[drb_id_t::drb2].lcid, ue_res1->value().drbs[drb_id_t::drb2].lcid);
+}
+
+TEST_P(du_ran_resource_manager_tester, when_a_drb_is_released_then_the_drbs_set_up_again_keep_their_lcids)
+{
+  const du_ue_index_t           ue_idx1 = to_du_ue_index(0);
+  ue_ran_resource_configurator* ue_res1 = create_ue(ue_idx1);
+  ASSERT_NE(ue_res1, nullptr);
+  ASSERT_FALSE(ue_res1->update(to_du_cell_index(0), srb1_creation_req(ue_idx1)).failed());
+  ASSERT_TRUE(
+      ue_res1->update(to_du_cell_index(0), drb_creation_req(ue_idx1, {drb_id_t::drb1, drb_id_t::drb2, drb_id_t::drb3}))
+          .failed_drbs.empty());
+  f1ap_ue_context_update_request rem_req;
+  rem_req.ue_index    = ue_idx1;
+  rem_req.drbs_to_rem = {drb_id_t::drb2};
+  ASSERT_FALSE(ue_res1->update(to_du_cell_index(0), rem_req).failed());
+  ASSERT_FALSE(ue_res1->value().drbs.contains(drb_id_t::drb2));
+
+  // On resume, the CU-CP sets up the two remaining DRBs again in a single request.
+  const du_ue_index_t           ue_idx2 = to_du_ue_index(1);
+  ue_ran_resource_configurator* ue_res2 = create_ue(ue_idx2);
+  ASSERT_NE(ue_res2, nullptr);
+  ASSERT_FALSE(ue_res2->update(to_du_cell_index(0), srb1_creation_req(ue_idx2)).failed());
+  ASSERT_TRUE(ue_res2->update(to_du_cell_index(0), drb_creation_req(ue_idx2, {drb_id_t::drb1, drb_id_t::drb3}))
+                  .failed_drbs.empty());
+
+  ASSERT_EQ(ue_res2->value().drbs[drb_id_t::drb1].lcid, ue_res1->value().drbs[drb_id_t::drb1].lcid);
+  ASSERT_EQ(ue_res2->value().drbs[drb_id_t::drb3].lcid, ue_res1->value().drbs[drb_id_t::drb3].lcid);
 }
 
 TEST_P(du_ran_resource_manager_tester, when_multiple_ues_are_created_then_they_use_different_sr_offsets)
