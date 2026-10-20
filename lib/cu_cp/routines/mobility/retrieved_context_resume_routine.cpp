@@ -147,16 +147,17 @@ bool retrieved_context_resume_routine::fill_ue_context_setup_request()
 
 bool retrieved_context_resume_routine::fill_rrc_resume_response()
 {
-  // The UE re-established PDCP for SRB1 itself when it sent the RRCResumeRequest (TS 38.331 section 5.3.13.3), so the
-  // SRBs are not marked for PDCP re-establishment. The DRBs are set up with their full configuration, since the UE
-  // releases the ones it stored while suspended (TS 38.331 section 5.3.5.11).
+  // The UE re-established PDCP for SRB1 itself when it sent the RRCResumeRequest (TS 38.331 section 5.3.13.3). SRB2
+  // keeps its PDCP entity under the full configuration (TS 38.331 section 5.3.5.11) but takes the new keys with the
+  // RRCResume, so the RRCResume sets reestablishPDCP for SRB2 (TS 38.331 section 6.3.2). The UE releases the DRBs it
+  // stored while suspended, so they carry their full configuration (TS 38.331 section 5.3.5.11).
   if (!fill_rrc_resume_request_response(response_msg,
                                         ue_context_setup_request.srbs_to_be_setup_list,
                                         next_config.pdu_sessions_to_setup_list,
                                         {} /* No DRB to be removed */,
                                         ue_context_setup_response.du_to_cu_rrc_info,
                                         ue.get_rrc_ue()->generate_meas_config(),
-                                        false /* The UE reestablished SRBs after sending the resume request */,
+                                        true /* Reestablish SRB2, the UE reestablished SRB1 itself */,
                                         false /* Set the DRBs up anew */,
                                         std::nullopt /* Selected algos */,
                                         logger)) {

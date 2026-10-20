@@ -466,6 +466,33 @@ TEST_F(cu_cp_inter_cu_ue_context_retrieval_resume_test, when_context_is_retrieve
   ASSERT_TRUE(asn1_drb.cn_assoc_present) << "The DRB was set up without an SDAP configuration";
 }
 
+TEST_F(cu_cp_inter_cu_ue_context_retrieval_resume_test,
+       when_context_is_retrieved_then_rrc_resume_reestablishes_pdcp_for_srb2_but_not_for_srb1)
+{
+  ASSERT_TRUE(retrieve_ue_context_for_resume());
+  ASSERT_TRUE(setup_bearers_and_await_rrc_resume());
+
+  const byte_buffer packed_dl_dcch = test_helpers::extract_dl_dcch_msg(test_helpers::get_rrc_container(f1ap_pdu));
+  asn1::cbit_ref    bref{packed_dl_dcch};
+  asn1::rrc_nr::dl_dcch_msg_s dl_dcch_msg;
+  ASSERT_EQ(dl_dcch_msg.unpack(bref), asn1::OCUDUASN_SUCCESS);
+  ASSERT_TRUE(test_helpers::is_valid_rrc_resume(dl_dcch_msg));
+
+  // The UE re-establishes PDCP for SRB1 itself when it sends the RRCResumeRequest. SRB2 keeps its PDCP entity under the
+  // full configuration but changes its keys with the RRCResume (TS 38.331 sections 5.3.5.11, 5.3.13.3 and 6.3.2).
+  const auto& resume_ies = dl_dcch_msg.msg.c1().rrc_resume().crit_exts.rrc_resume();
+  ASSERT_TRUE(resume_ies.full_cfg_present);
+  ASSERT_TRUE(resume_ies.radio_bearer_cfg_present);
+  const auto& srbs = resume_ies.radio_bearer_cfg.srb_to_add_mod_list;
+  const auto  srb1 = std::find_if(srbs.begin(), srbs.end(), [](const auto& srb) { return srb.srb_id == 1; });
+  const auto  srb2 = std::find_if(srbs.begin(), srbs.end(), [](const auto& srb) { return srb.srb_id == 2; });
+  ASSERT_NE(srb2, srbs.end()) << "The RRCResume does not configure SRB2";
+  ASSERT_TRUE(srb2->reestablish_pdcp_present) << "SRB2 keeps its PDCP entity after the key change";
+  if (srb1 != srbs.end()) {
+    ASSERT_FALSE(srb1->reestablish_pdcp_present) << "SRB1 is re-established twice";
+  }
+}
+
 TEST_F(cu_cp_inter_cu_ue_context_retrieval_resume_test, when_context_is_retrieved_on_resume_then_path_is_switched)
 {
   ASSERT_TRUE(retrieve_ue_context_for_resume());
