@@ -179,7 +179,7 @@ void ue_resume_routine::operator()(coro_context<async_task<rrc_resume_request_re
                                             {} /* No DRB to be removed */,
                                             ue_context_setup_response.du_to_cu_rrc_info,
                                             ue->get_rrc_ue()->generate_meas_config(rrc_context.meas_cfg),
-                                            false /* The UE reestablished SRBs after sending the resume request */,
+                                            true /* Reestablish SRB2, the UE reestablished SRB1 itself */,
                                             true /* Reestablish DRBs */,
                                             std::nullopt /* Selected algos */,
                                             logger)) {

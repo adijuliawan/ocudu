@@ -529,7 +529,9 @@ bool ocudu::ocucp::fill_rrc_resume_request_response(
     for (const f1ap_srb_to_setup& srb_to_add_mod : srbs_to_be_setup_mod_list) {
       rrc_srb_to_add_mod srb = {};
       srb.srb_id             = srb_to_add_mod.srb_id;
-      if (reestablish_srbs) {
+      // The UE re-establishes PDCP for SRB1 itself when it sends the RRCResumeRequest, so the network does not set the
+      // field for SRB1, as per TS 38.331, Sections 5.3.13.3 and 6.3.2 (RadioBearerConfig field descriptions).
+      if (reestablish_srbs && srb_to_add_mod.srb_id != srb_id_t::srb1) {
         srb.reestablish_pdcp_present = true;
       }
       radio_bearer_config.srb_to_add_mod_list.emplace(srb_to_add_mod.srb_id, srb);
