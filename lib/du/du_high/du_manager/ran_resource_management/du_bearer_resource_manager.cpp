@@ -11,9 +11,22 @@
 using namespace ocudu;
 using namespace odu;
 
-/// \brief Finds an unused LCID for DRBs given a list of UE configured RLC bearers.
-static lcid_t find_empty_lcid(const slotted_id_vector<drb_id_t, du_ue_drb_config>& drbs)
+/// \brief Finds an unused LCID for a new DRB given a list of UE configured RLC bearers.
+///
+/// Prefers the LCID derived from the DRB ID, so a DRB gets the same LCID whatever the order of the DRB setups.
+static lcid_t find_empty_lcid(drb_id_t drb_id, const slotted_id_vector<drb_id_t, du_ue_drb_config>& drbs)
 {
+  // A UE resumed from RRC_INACTIVE gets all its DRBs set up again in a single request. The RRCResume carries a delta on
+  // top of the configuration the UE stored on suspend, as per TS 38.331, Section 5.3.13.4. The UE never re-associates a
+  // configured logical channel with another radio bearer, as per TS 38.331, Section 5.3.5.5.4. So each DRB must get
+  // back the LCID of its first setup.
+  const lcid_t drb_lcid  = uint_to_lcid(LCID_MIN_DRB - 1U + static_cast<unsigned>(drb_id));
+  const bool   lcid_used = std::any_of(
+      drbs.begin(), drbs.end(), [drb_lcid](const du_ue_drb_config& drb) { return drb.lcid == drb_lcid; });
+  if (drb_lcid <= LCID_MAX_DRB and not lcid_used) {
+    return drb_lcid;
+  }
+
   static_vector<lcid_t, MAX_NOF_DRBS> used_lcids;
   for (const auto& drb : drbs) {
     used_lcids.push_back(drb.lcid);
@@ -174,7 +187,7 @@ std::vector<drb_id_t> du_bearer_resource_manager::setup_drbs(du_ue_resource_conf
     }
 
     // Allocate LCID.
-    lcid_t lcid = find_empty_lcid(ue_cfg.drbs);
+    lcid_t lcid = find_empty_lcid(drb_to_setup.drb_id, ue_cfg.drbs);
     if (lcid > LCID_MAX_DRB) {
       logger.warning("Failed to allocate {}. Cause: No available LCIDs", drb_to_setup.drb_id);
       failed_drbs.push_back(drb_to_setup.drb_id);
