@@ -855,6 +855,36 @@ TEST_F(cu_cp_rrc_inactive_test, when_rrc_resume_request_is_received_then_existin
   ASSERT_EQ(report.dus[0].rrc_metrics.successful_rrc_connection_resumes.get_count(resume_cause_t::mo_data), 1);
 }
 
+TEST_F(cu_cp_rrc_inactive_test, when_ue_is_resumed_then_rrc_resume_reestablishes_pdcp_for_srb2_but_not_for_srb1)
+{
+  connect_ue_with_rrc_inactive_support();
+  ASSERT_TRUE(send_ue_level_bearer_context_inactivity_notification_and_await_bearer_context_modification_request());
+  ASSERT_TRUE(send_bearer_context_modification_response_and_await_ue_context_release_command());
+  ASSERT_TRUE(send_f1ap_ue_context_release_complete());
+  ASSERT_TRUE(send_init_ul_rrc_message_transfer_and_await_ue_context_setup_request());
+  ASSERT_TRUE(send_ue_context_setup_response_and_await_bearer_context_modification_request());
+  ASSERT_TRUE(send_bearer_context_modification_response_and_await_dl_rrc_message_transfer());
+
+  const byte_buffer packed_dl_dcch = test_helpers::extract_dl_dcch_msg(test_helpers::get_rrc_container(f1ap_pdu));
+  asn1::cbit_ref    bref{packed_dl_dcch};
+  asn1::rrc_nr::dl_dcch_msg_s dl_dcch_msg;
+  ASSERT_EQ(dl_dcch_msg.unpack(bref), asn1::OCUDUASN_SUCCESS);
+  ASSERT_TRUE(test_helpers::is_valid_rrc_resume(dl_dcch_msg));
+
+  // The UE re-establishes PDCP for SRB1 itself when it sends the RRCResumeRequest, while SRB2 changes its keys with the
+  // RRCResume (TS 38.331, Sections 5.3.13.3 and 6.3.2).
+  const auto& resume_ies = dl_dcch_msg.msg.c1().rrc_resume().crit_exts.rrc_resume();
+  ASSERT_TRUE(resume_ies.radio_bearer_cfg_present);
+  const auto& srbs = resume_ies.radio_bearer_cfg.srb_to_add_mod_list;
+  const auto  srb1 = std::find_if(srbs.begin(), srbs.end(), [](const auto& srb) { return srb.srb_id == 1; });
+  const auto  srb2 = std::find_if(srbs.begin(), srbs.end(), [](const auto& srb) { return srb.srb_id == 2; });
+  ASSERT_NE(srb2, srbs.end()) << "The RRCResume does not configure SRB2";
+  ASSERT_TRUE(srb2->reestablish_pdcp_present) << "SRB2 keeps its PDCP entity after the key change";
+  if (srb1 != srbs.end()) {
+    ASSERT_FALSE(srb1->reestablish_pdcp_present) << "SRB1 is re-established twice";
+  }
+}
+
 TEST_F(cu_cp_rrc_inactive_test, when_ue_becomes_inactive_after_resume_then_resume_is_successful_again)
 {
   // Connect UE with RRC Inactive support.

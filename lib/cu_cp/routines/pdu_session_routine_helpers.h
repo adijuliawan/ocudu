@@ -101,7 +101,7 @@ bool fill_rrc_reconfig_args(rrc_reconfiguration_procedure_request&              
 /// \param[in] drb_to_remove DRBs that are no longer associated with any PDU session.
 /// \param[in] du_to_cu_rrc_info Information the DU reported, carrying the cell group and measurement gap config.
 /// \param[in] rrc_meas_cfg Measurement configuration to send to the UE.
-/// \param[in] reestablish_srbs Whether the UE has to re-establish PDCP for the SRBs.
+/// \param[in] reestablish_srbs Whether the UE has to re-establish PDCP for the SRBs other than SRB1.
 /// \param[in] reestablish_drbs Whether the UE has to re-establish PDCP for the DRBs.
 /// \param[in] selected_algos Security algorithms to signal, if the UE has to apply new ones.
 /// \param[in] logger Reference to the logger.
