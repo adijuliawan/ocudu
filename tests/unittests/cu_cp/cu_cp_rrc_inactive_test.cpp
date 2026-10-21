@@ -1123,6 +1123,43 @@ TEST_F(cu_cp_rrc_inactive_test, when_bearer_context_modification_for_rrc_resume_
       report.dus[0].rrc_metrics.successful_rrc_connection_resumes_with_fallback.get_count(resume_cause_t::mo_data), 0);
 }
 
+TEST_F(cu_cp_rrc_inactive_test,
+       when_ue_context_release_command_is_received_during_rrc_resume_then_release_does_not_wait_for_resume_timeout)
+{
+  // Connect UE with RRC Inactive support.
+  connect_ue_with_rrc_inactive_support();
+
+  // Inject Inactivity Notification and handle it.
+  ASSERT_TRUE(trigger_rrc_inactive(du_ue_id));
+
+  // Send Initial UL RRC Message containing RRC Resume Request.
+  ASSERT_TRUE(send_init_ul_rrc_message_transfer_and_await_ue_context_setup_request());
+
+  // Send UE Context Setup Response and await Bearer Context Modification Request.
+  ASSERT_TRUE(send_ue_context_setup_response_and_await_bearer_context_modification_request());
+
+  // Send Bearer Context Modification Response and await DL RRC Message Transfer with the RRC Resume.
+  ASSERT_TRUE(send_bearer_context_modification_response_and_await_dl_rrc_message_transfer());
+
+  // The UE drops the RRC Resume and falls back to an RRC Setup, so no RRC Resume Complete arrives and the AMF releases
+  // the old context. The release has to start well within the resume's guard time, which the helper's wait is.
+  ASSERT_TRUE(send_ngap_ue_context_release_command_and_await_bearer_context_release_command());
+
+  // Inject Bearer Context Release Complete and await F1AP UE Context Release Command.
+  ASSERT_TRUE(send_bearer_context_release_complete_and_await_f1ap_ue_context_release_command());
+
+  // Inject F1AP UE Context Release Complete from the DU UE of the resume and await NGAP UE Context Release Complete.
+  ASSERT_TRUE(send_f1ap_ue_context_release_complete(du_ue_id_2));
+  ASSERT_TRUE(this->wait_for_ngap_tx_pdu(ngap_pdu));
+  ASSERT_TRUE(test_helpers::is_valid_ue_context_release_complete(ngap_pdu));
+
+  // STATUS: UE should be removed at this stage.
+  auto report = this->get_cu_cp().get_metrics_handler().request_metrics_report();
+  ASSERT_EQ(report.ues.size(), 0) << "UE should be removed";
+  ASSERT_EQ(report.dus[0].rrc_metrics.attempted_rrc_connection_resumes.get_count(resume_cause_t::mo_data), 1);
+  ASSERT_EQ(report.dus[0].rrc_metrics.successful_rrc_connection_resumes.get_count(resume_cause_t::mo_data), 0);
+}
+
 TEST_F(cu_cp_rrc_inactive_test, when_rrc_resume_request_with_cause_rna_upd_is_received_then_ue_is_set_to_inactive_again)
 {
   // Connect UE with RRC Inactive support.

@@ -124,6 +124,7 @@ public:
   handle_new_pdu_session_resource_release_command(const ngap_pdu_session_resource_release_command& command) override;
   async_task<cu_cp_ue_context_release_complete>
   handle_ue_context_release_command(const cu_cp_ue_context_release_command& command) override;
+  void handle_ue_context_release_command_received(cu_cp_ue_index_t ue_index) override;
   async_task<cu_cp_handover_resource_allocation_response>
        handle_ngap_handover_request(const ngap_handover_request& request) override;
   void handle_transmission_of_handover_required() override;

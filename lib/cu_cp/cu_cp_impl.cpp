@@ -1222,6 +1222,23 @@ cu_cp_impl::handle_ue_context_release_command(const cu_cp_ue_context_release_com
                                                   logger);
 }
 
+void cu_cp_impl::handle_ue_context_release_command_received(cu_cp_ue_index_t ue_index)
+{
+  cu_cp_ue* ue = ue_mng.find_du_ue(ue_index);
+  if (ue == nullptr || ue->get_rrc_ue() == nullptr) {
+    return;
+  }
+
+  // A UE in RRC_INACTIVE can only have the RRC Resume pending. It waits for an RRCResumeComplete the AMF has given
+  // up on: the UE fell back to an RRC Setup or was lost, and the AMF released the context (TS 38.413 section 8.3.3).
+  // The release runs after the resume in the UE task scheduler, so cancel the resume rather than hold the release
+  // until it times out. Procedures of a connected UE keep running to their end.
+  if (ue->get_rrc_ue()->get_rrc_state() == rrc_state::inactive) {
+    logger.debug("ue={}: Cancelling the RRC transactions of the inactive UE ahead of its release", ue_index);
+    ue->get_rrc_ue()->cancel_all_transactions();
+  }
+}
+
 async_task<cu_cp_handover_resource_allocation_response>
 cu_cp_impl::handle_ngap_handover_request(const ngap_handover_request& request)
 {

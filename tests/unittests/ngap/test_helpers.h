@@ -369,6 +369,8 @@ public:
     });
   }
 
+  void on_ue_context_release_command_received(cu_cp_ue_index_t ue_index) override {}
+
   void on_n2_handover_execution(cu_cp_ue_index_t ue_index) override {}
 
   void on_n2_disconnection(cu_cp_amf_index_t amf_index) override {}
