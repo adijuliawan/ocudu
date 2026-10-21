@@ -12,7 +12,7 @@ using namespace asn1::rrc_nr;
 
 pdu_session_resource_release_routine::pdu_session_resource_release_routine(
     const ngap_pdu_session_resource_release_command& release_cmd_,
-    e1ap_bearer_context_manager&                     e1ap_bearer_ctxt_mng_,
+    e1ap_bearer_context_manager*                     e1ap_bearer_ctxt_mng_,
     f1ap_ue_context_manager&                         f1ap_ue_ctxt_mng_,
     rrc_ue_interface*                                rrc_ue_,
     cu_cp_rrc_ue_interface&                          cu_cp_notifier_,
@@ -51,15 +51,44 @@ void pdu_session_resource_release_routine::operator()(
 
   logger.debug("ue={}: \"{}\" initialized", release_cmd.ue_index, name());
 
+  // A PDU session this node holds no context for has no resources to release on Uu or NG (TS 38.413 section 8.2.2.2),
+  // so it is left out of the CU-UP, DU and UE steps but still reported as released. This happens when the context
+  // was set up anew without the session, e.g. after an RRC Resume fell back to an RRC Setup.
+  known_release_cmd.ue_index        = release_cmd.ue_index;
+  known_release_cmd.ran_paging_prio = release_cmd.ran_paging_prio;
+  for (const auto& item : release_cmd.pdu_session_res_to_release_list_rel_cmd) {
+    if (up_resource_mng.has_pdu_session(item.pdu_session_id)) {
+      known_release_cmd.pdu_session_res_to_release_list_rel_cmd.emplace(item.pdu_session_id, item);
+    } else {
+      logger.info("ue={}: PDU session {} to release has no context. Reporting it as released",
+                  release_cmd.ue_index,
+                  item.pdu_session_id);
+    }
+  }
+
+  if (known_release_cmd.pdu_session_res_to_release_list_rel_cmd.empty() &&
+      !release_cmd.pdu_session_res_to_release_list_rel_cmd.empty()) {
+    // Nothing to release here, but a NAS-PDU still has to reach the UE (TS 38.413 section 8.2.2.2).
+    if (!release_cmd.nas_pdu.empty() && rrc_ue != nullptr) {
+      rrc_ue->handle_dl_nas_transport_message(release_cmd.nas_pdu.copy());
+    }
+    CORO_EARLY_RETURN(handle_pdu_session_resource_release_response(true));
+  }
+
   // Perform initial sanity checks on incoming message.
-  if (!up_resource_mng.validate_request(release_cmd)) {
+  if (!up_resource_mng.validate_request(known_release_cmd)) {
     logger.warning("ue={}: \"{}\" Invalid PduSessionResourceReleaseCommand", release_cmd.ue_index, name());
+    CORO_EARLY_RETURN(handle_pdu_session_resource_release_response(false));
+  }
+
+  if (e1ap_bearer_ctxt_mng == nullptr) {
+    logger.warning("ue={}: \"{}\" UE has PDU sessions but no CU-UP", release_cmd.ue_index, name());
     CORO_EARLY_RETURN(handle_pdu_session_resource_release_response(false));
   }
 
   {
     // Calculate next user-plane configuration based on incoming release command.
-    next_config = up_resource_mng.calculate_update(release_cmd);
+    next_config = up_resource_mng.calculate_update(known_release_cmd);
   }
 
   // Inform the CU-UP about the release of the bearer context.
@@ -70,7 +99,7 @@ void pdu_session_resource_release_routine::operator()(
     /// NOTE: Only the Bearer Context at the CU-UP will be released. We don't want to release the UE.
 
     // Request BearerContextRelease.
-    CORO_AWAIT(e1ap_bearer_ctxt_mng.handle_bearer_context_release_command(bearer_context_release_command));
+    CORO_AWAIT(e1ap_bearer_ctxt_mng->handle_bearer_context_release_command(bearer_context_release_command));
 
   } else { // Inform CU-UP about the release of a bearer.
 
@@ -86,7 +115,7 @@ void pdu_session_resource_release_routine::operator()(
     // Call E1AP procedure and wait for BearerContextModificationResponse.
     CORO_AWAIT_VALUE(
         bearer_context_modification_response,
-        e1ap_bearer_ctxt_mng.handle_bearer_context_modification_request(bearer_context_modification_request));
+        e1ap_bearer_ctxt_mng->handle_bearer_context_modification_request(bearer_context_modification_request));
 
     // Handle BearerContextModificationResponse.
     if (not bearer_context_modification_response.success) {

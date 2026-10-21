@@ -247,6 +247,24 @@ bool ocudu::test_helpers::is_valid_rrc_resume(const byte_buffer& dl_dcch_msg)
   return is_valid_rrc_resume(msg);
 }
 
+bool ocudu::test_helpers::is_valid_rrc_dl_information_transfer(const asn1::rrc_nr::dl_dcch_msg_s& msg)
+{
+  TRUE_OR_RETURN(msg.msg.type().value == asn1::rrc_nr::dl_dcch_msg_type_c::types_opts::c1);
+  TRUE_OR_RETURN(msg.msg.c1().type().value ==
+                 asn1::rrc_nr::dl_dcch_msg_type_c::c1_c_::types_opts::options::dl_info_transfer);
+  TRUE_OR_RETURN(not msg.msg.c1().dl_info_transfer().crit_exts.dl_info_transfer().ded_nas_msg.empty());
+
+  return true;
+}
+
+bool ocudu::test_helpers::is_valid_rrc_dl_information_transfer(const byte_buffer& dl_dcch_msg)
+{
+  asn1::cbit_ref              bref{dl_dcch_msg};
+  asn1::rrc_nr::dl_dcch_msg_s msg;
+  TRUE_OR_RETURN(msg.unpack(bref) == asn1::OCUDUASN_SUCCESS);
+  return is_valid_rrc_dl_information_transfer(msg);
+}
+
 bool test_helpers::is_valid_sib1(const byte_buffer& packed_sib1)
 {
   asn1::cbit_ref       bref{packed_sib1};
