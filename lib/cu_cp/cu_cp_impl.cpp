@@ -1182,14 +1182,16 @@ cu_cp_impl::handle_new_pdu_session_resource_release_command(const ngap_pdu_sessi
     logger.error("ue={}: Dropping PDUSessionResourceReleaseCommand. Could not find DU UE", command.ue_index);
     return launch_no_op_task(ngap_pdu_session_resource_release_response{});
   }
-  if (ue->get_cu_up_index() == cu_cp_cu_up_index_t::invalid) {
-    logger.error("ue={}: Dropping PDUSessionResourceReleaseCommand. Could not find CU-UP of the UE", command.ue_index);
-    return launch_no_op_task(ngap_pdu_session_resource_release_response{});
+
+  // A UE without a CU-UP holds no PDU session, so the routine reports the requested ones as released without one.
+  e1ap_bearer_context_manager* e1ap_bearer_ctxt_mng = nullptr;
+  if (ue->get_cu_up_index() != cu_cp_cu_up_index_t::invalid) {
+    e1ap_bearer_ctxt_mng = &cu_up_db.find_cu_up_processor(ue->get_cu_up_index())->get_e1ap_bearer_context_manager();
   }
 
   return launch_async<pdu_session_resource_release_routine>(
       command,
-      cu_up_db.find_cu_up_processor(ue->get_cu_up_index())->get_e1ap_bearer_context_manager(),
+      e1ap_bearer_ctxt_mng,
       du_db.get_du_processor(ue->get_du_index()).get_f1ap_handler(),
       ue->get_rrc_ue(),
       get_cu_cp_rrc_ue_interface(),

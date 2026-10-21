@@ -444,3 +444,94 @@ TEST_F(cu_cp_pdu_session_resource_release_test,
   ASSERT_EQ(released_list[0].pdu_session_id, to_underlying(psi));
   ASSERT_EQ(released_list[1].pdu_session_id, to_underlying(psi2));
 }
+
+TEST_F(cu_cp_pdu_session_resource_release_test,
+       when_release_command_is_for_unknown_pdu_session_then_it_is_reported_as_released_and_nas_pdu_is_forwarded)
+{
+  // Inject NGAP PDU Session Resource Release Command for a PDU session that was never set up.
+  get_amf().push_tx_pdu(
+      generate_valid_pdu_session_resource_release_command(amf_ue_id, ue_ctx->ran_ue_id.value(), psi2));
+
+  // The NAS-PDU of the command reaches the UE in a DL Information Transfer.
+  ASSERT_TRUE(this->wait_for_f1ap_tx_pdu(du_idx, f1ap_pdu));
+  ASSERT_TRUE(test_helpers::is_valid_dl_rrc_message_transfer(f1ap_pdu));
+  ASSERT_TRUE(test_helpers::is_valid_rrc_dl_information_transfer(
+      test_helpers::extract_dl_dcch_msg(test_helpers::get_rrc_container(f1ap_pdu))));
+
+  // The PDU session is reported as released, with no UE release requested and nothing sent to the CU-UP.
+  ASSERT_TRUE(this->wait_for_ngap_tx_pdu(ngap_pdu));
+  ASSERT_TRUE(test_helpers::is_valid_pdu_session_resource_release_response(ngap_pdu));
+  const auto& released_list =
+      ngap_pdu.pdu.successful_outcome().value.pdu_session_res_release_resp()->pdu_session_res_released_list_rel_res;
+  ASSERT_EQ(released_list.size(), 1);
+  ASSERT_EQ(released_list[0].pdu_session_id, to_underlying(psi2));
+  ASSERT_FALSE(this->get_amf().try_pop_rx_pdu(ngap_pdu));
+  ASSERT_FALSE(this->get_cu_up(cu_up_idx).try_pop_rx_pdu(e1ap_pdu));
+
+  // The PDU session that exists is untouched and can still be released.
+  ASSERT_TRUE(send_pdu_session_release_command_and_await_bearer_context_release_command());
+  ASSERT_TRUE(send_bearer_context_release_complete_and_await_ue_context_modification_request());
+  ASSERT_TRUE(send_ue_context_modification_response_and_await_rrc_reconfiguration());
+  ASSERT_TRUE(send_rrc_reconfiguration_complete_and_await_pdu_session_release_response(0, 8));
+}
+
+TEST_F(cu_cp_pdu_session_resource_release_test,
+       when_release_command_mixes_known_and_unknown_pdu_sessions_then_both_are_reported_as_released)
+{
+  report_fatal_error_if_not(not this->get_amf().try_pop_rx_pdu(ngap_pdu), "there are still NGAP messages to pop");
+
+  // Inject NGAP PDU Session Resource Release Command for the existing PDU session and one that was never set up. Only
+  // the existing one is released at the CU-UP.
+  get_amf().push_tx_pdu(
+      generate_valid_pdu_session_resource_release_command(amf_ue_id, ue_ctx->ran_ue_id.value(), {psi, psi2}));
+  ASSERT_TRUE(this->wait_for_e1ap_tx_pdu(cu_up_idx, e1ap_pdu));
+  ASSERT_TRUE(test_helpers::is_valid_bearer_context_release_command(e1ap_pdu));
+
+  // Inject Bearer Context Release Complete and await UE Context Modification Request
+  ASSERT_TRUE(send_bearer_context_release_complete_and_await_ue_context_modification_request());
+
+  // Inject UE Context Modification Response and await RRC Reconfiguration
+  ASSERT_TRUE(send_ue_context_modification_response_and_await_rrc_reconfiguration());
+
+  // Inject RRC Reconfiguration Complete and await PDU Session Resource Release Response
+  ASSERT_TRUE(send_rrc_reconfiguration_complete_and_await_pdu_session_release_response(0, 8));
+
+  const auto& released_list =
+      ngap_pdu.pdu.successful_outcome().value.pdu_session_res_release_resp()->pdu_session_res_released_list_rel_res;
+  ASSERT_EQ(released_list.size(), 2);
+  ASSERT_EQ(released_list[0].pdu_session_id, to_underlying(psi));
+  ASSERT_EQ(released_list[1].pdu_session_id, to_underlying(psi2));
+}
+
+TEST_F(cu_cp_pdu_session_resource_release_test,
+       when_release_command_is_for_ue_without_cu_up_then_pdu_session_is_reported_as_released)
+{
+  // Register a second UE without any PDU session, so it has no CU-UP. This is the state after an RRC Resume fell back
+  // to an RRC Setup and the AMF set the context up without sessions.
+  const gnb_du_ue_f1ap_id_t du_ue_id2  = int_to_gnb_du_ue_f1ap_id(1);
+  const amf_ue_id_t         amf_ue_id2 = uint_to_amf_ue_id(1);
+  ASSERT_TRUE(connect_new_ue(du_idx, du_ue_id2, to_rnti(0x4602)));
+  ASSERT_TRUE(authenticate_ue(du_idx, du_ue_id2, amf_ue_id2));
+  ASSERT_TRUE(setup_ue_security_and_ue_capabilities(du_idx, du_ue_id2));
+  ASSERT_TRUE(finish_ue_registration(du_idx, cu_up_idx, du_ue_id2));
+  const ue_context* ue_ctx2 = this->find_ue_context(du_idx, du_ue_id2);
+  ASSERT_NE(ue_ctx2, nullptr);
+
+  // Inject NGAP PDU Session Resource Release Command for a PDU session the UE does not have here.
+  get_amf().push_tx_pdu(
+      generate_valid_pdu_session_resource_release_command(amf_ue_id2, ue_ctx2->ran_ue_id.value(), psi));
+
+  // The NAS-PDU of the command reaches the UE in a DL Information Transfer.
+  ASSERT_TRUE(this->wait_for_f1ap_tx_pdu(du_idx, f1ap_pdu));
+  ASSERT_TRUE(test_helpers::is_valid_dl_rrc_message_transfer(f1ap_pdu));
+  ASSERT_TRUE(test_helpers::is_valid_rrc_dl_information_transfer(
+      test_helpers::extract_dl_dcch_msg(test_helpers::get_rrc_container(f1ap_pdu))));
+
+  // The PDU session is reported as released instead of the command being dropped with an Error Indication.
+  ASSERT_TRUE(this->wait_for_ngap_tx_pdu(ngap_pdu));
+  ASSERT_TRUE(test_helpers::is_valid_pdu_session_resource_release_response(ngap_pdu));
+  const auto& released_list =
+      ngap_pdu.pdu.successful_outcome().value.pdu_session_res_release_resp()->pdu_session_res_released_list_rel_res;
+  ASSERT_EQ(released_list.size(), 1);
+  ASSERT_EQ(released_list[0].pdu_session_id, to_underlying(psi));
+}

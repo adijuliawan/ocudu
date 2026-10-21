@@ -53,6 +53,10 @@ bool is_valid_rrc_release_with_suspend(const byte_buffer& dl_dcch_msg);
 bool is_valid_rrc_resume(const asn1::rrc_nr::dl_dcch_msg_s& msg);
 bool is_valid_rrc_resume(const byte_buffer& dl_dcch_msg);
 
+/// \brief Check if DL-DCCH message is a valid DL Information Transfer message carrying a NAS PDU.
+bool is_valid_rrc_dl_information_transfer(const asn1::rrc_nr::dl_dcch_msg_s& msg);
+bool is_valid_rrc_dl_information_transfer(const byte_buffer& dl_dcch_msg);
+
 bool is_valid_sib1(const byte_buffer& packed_sib1);
 
 bool is_valid_pdcp_security(const byte_buffer& dl_dcch_msg,

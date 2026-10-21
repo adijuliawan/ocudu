@@ -20,7 +20,7 @@ class pdu_session_resource_release_routine
 {
 public:
   pdu_session_resource_release_routine(const ngap_pdu_session_resource_release_command& release_cmd_,
-                                       e1ap_bearer_context_manager&                     e1ap_bearer_ctxt_mng_,
+                                       e1ap_bearer_context_manager*                     e1ap_bearer_ctxt_mng_,
                                        f1ap_ue_context_manager&                         f1ap_ue_ctxt_mng_,
                                        rrc_ue_interface*                                rrc_ue_,
                                        cu_cp_rrc_ue_interface&                          cu_cp_notifier_,
@@ -38,10 +38,12 @@ private:
   ngap_pdu_session_resource_release_response handle_pdu_session_resource_release_response(bool success);
 
   const ngap_pdu_session_resource_release_command release_cmd;
+  // The part of the command for the PDU sessions this node holds a context for.
+  ngap_pdu_session_resource_release_command known_release_cmd;
 
   up_config_update next_config;
 
-  e1ap_bearer_context_manager& e1ap_bearer_ctxt_mng; // to trigger bearer context setup at CU-UP
+  e1ap_bearer_context_manager* e1ap_bearer_ctxt_mng; // to trigger bearer context setup at CU-UP, if the UE has one
   f1ap_ue_context_manager&     f1ap_ue_ctxt_mng;     // to trigger UE context modification at DU
   rrc_ue_interface*            rrc_ue;               // to trigger RRC Reconfiguration at UE
   cu_cp_rrc_ue_interface&      cu_cp_notifier;       // to trigger UE release at CU-CP
