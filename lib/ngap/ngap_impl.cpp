@@ -940,6 +940,9 @@ void ngap_impl::handle_ue_context_release_command(const asn1::ngap::ue_context_r
   msg.ue_index = ue_ctxt.ue_ids.ue_index;
   fill_cu_cp_ue_context_release_command(msg, cmd);
 
+  // The release is queued behind the tasks the UE is running, so let the CU-CP end those that only wait for the UE.
+  cu_cp_notifier.on_ue_context_release_command_received(msg.ue_index);
+
   // Start routine.
   ue->schedule_async_task(launch_async<ngap_ue_context_release_procedure>(
       msg, ue_ctxt.ue_ids, stored_error_indications, cu_cp_notifier, tx_pdu_notifier, ue_ctxt.logger));

@@ -143,8 +143,11 @@ void rrc_resume_procedure::operator()(coro_context<async_task<void>>& ctx)
 
     logger.log_info("\"{}\" finished successfully", name());
 
-  } else {
+  } else if (transaction.failure_cause() == protocol_transaction_failure::timeout) {
     logger.log_warning("\"{}\" failed. Cause: Timeout after {}ms", name(), procedure_timeout.count());
+  } else {
+    // The CU-CP cancels the resume when the UE is released, which is not an error of this procedure.
+    logger.log_info("\"{}\" canceled. Cause: UE release", name());
   }
 
   CORO_RETURN();

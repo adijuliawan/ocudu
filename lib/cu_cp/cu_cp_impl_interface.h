@@ -124,6 +124,10 @@ public:
   virtual async_task<ngap_pdu_session_resource_release_response>
   handle_new_pdu_session_resource_release_command(const ngap_pdu_session_resource_release_command& command) = 0;
 
+  /// \brief Handle the reception of a new UE Context Release Command, before its procedure is scheduled.
+  /// \param[in] ue_index The index of the UE to be released.
+  virtual void handle_ue_context_release_command_received(cu_cp_ue_index_t ue_index) = 0;
+
   /// \brief Handle the handover request of the handover resource allocation procedure handover procedure.
   /// See TS 38.413 section 8.4.2.2.
   virtual async_task<cu_cp_handover_resource_allocation_response>

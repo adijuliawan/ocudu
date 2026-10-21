@@ -105,6 +105,12 @@ public:
     return cu_cp_handler->handle_ue_context_release_command(command);
   }
 
+  void on_ue_context_release_command_received(cu_cp_ue_index_t ue_index) override
+  {
+    ocudu_assert(cu_cp_handler != nullptr, "CU-CP NGAP handler must not be nullptr");
+    cu_cp_handler->handle_ue_context_release_command_received(ue_index);
+  }
+
   void on_transmission_of_handover_required() override
   {
     ocudu_assert(cu_cp_handler != nullptr, "CU-CP NGAP handler must not be nullptr");
