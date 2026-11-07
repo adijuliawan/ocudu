@@ -14,6 +14,7 @@
 #include "lib/scheduler/ue_context/ue_cell_repository.h"
 #include "lib/scheduler/ue_scheduling/ue_cell_grid_allocator.h"
 #include "lib/scheduler/ue_scheduling/ue_fallback_scheduler.h"
+#include "tests/ocudu_test_requirements.h"
 #include "tests/test_doubles/scheduler/cell_config_builder_profiles.h"
 #include "tests/test_doubles/scheduler/scheduler_config_helper.h"
 #include "tests/test_doubles/utils/test_rng.h"
@@ -496,6 +497,8 @@ TEST_P(fallback_scheduler_tester, failed_allocating_resources)
 
 TEST_P(fallback_scheduler_tester, when_conres_and_msg4_scheduled_separately_msg4_not_scheduled_until_conres_acked)
 {
+  OCUDU_TEST_REQUIREMENTS("MVP-FUNC-RACH-16-1", "DU-GEN-2-a");
+
   setup_sched(create_expert_config(1), create_custom_cell_config_request(params.k0));
 
   // Add UE 1.
@@ -543,6 +546,8 @@ TEST_P(fallback_scheduler_tester, when_conres_and_msg4_scheduled_separately_msg4
 
 TEST_P(fallback_scheduler_tester, conres_and_msg4_scheduled_scheduled_over_different_slots_if_they_dont_fit_together)
 {
+  OCUDU_TEST_REQUIREMENTS("MVP-FUNC-RACH-16-1", "DU-GEN-2-a");
+
   setup_sched(create_expert_config(1), create_custom_cell_config_request(params.k0));
 
   // Add UE 1.
@@ -585,6 +590,8 @@ TEST_P(fallback_scheduler_tester, conres_and_msg4_scheduled_scheduled_over_diffe
 
 TEST_P(fallback_scheduler_tester, when_conres_and_msg4_srb1_scheduled_separately_msg4_not_scheduled_until_conres_acked)
 {
+  OCUDU_TEST_REQUIREMENTS("MVP-FUNC-RACH-16-1", "DU-GEN-2-a");
+
   setup_sched(create_expert_config(1), create_custom_cell_config_request(params.k0));
 
   // Add UE 1.
@@ -639,6 +646,8 @@ TEST_P(fallback_scheduler_tester, when_conres_and_msg4_srb1_scheduled_separately
 
 TEST_P(fallback_scheduler_tester, when_ra_conres_timer_expires_ue_doesnt_get_allocated)
 {
+  OCUDU_TEST_REQUIREMENTS("MVP-FUNC-RACH-16-1", "DU-GEN-2-a");
+
   setup_sched(create_expert_config(1), create_custom_cell_config_request(params.k0));
 
   // Set MSG3 rx slot to 0 (it wouldn't be correct for TDD, but this is not relevant for this test).
@@ -661,9 +670,7 @@ TEST_P(fallback_scheduler_tester, when_ra_conres_timer_expires_ue_doesnt_get_all
     // Set the grid busy for all slots until the RA-ConRes timer expires, to test the scheduler behaviour after that
     // timer has expired.
     // NOTE: Allocate in advance, to prevent the scheduler from finding space for allocation in the next slots.
-    // NOTE: This must stay strictly greater than the fallback scheduler's \c max_dl_slots_ahead_sched, otherwise the
-    // scheduler looks past the busy region and finds free PDSCH space, defeating the purpose of the test.
-    const unsigned in_advance_slot_alloc = 10U;
+    const unsigned in_advance_slot_alloc = 5U;
     for (unsigned sl_in_adv = 1U; sl_in_adv <= in_advance_slot_alloc; ++sl_in_adv) {
       const slot_point next_allocation_slot       = current_slot + sl_in_adv;
       const int        elapsed_time_since_msg3_rx = next_allocation_slot - msg3_rx_slot;
@@ -692,6 +699,8 @@ TEST_P(fallback_scheduler_tester, when_ra_conres_timer_expires_ue_doesnt_get_all
 
 TEST_P(fallback_scheduler_tester, when_msgb_ack_not_yet_sent_ue_doesnt_get_allocated_until_msgb_ack_slot_passes)
 {
+  OCUDU_TEST_REQUIREMENTS("MVP-FUNC-RACH-16-2", "DU-GEN-2-a");
+
   setup_sched(create_expert_config(1), create_custom_cell_config_request(params.k0));
 
   const rnti_t     tc_rnti          = to_rnti(0x4601);
@@ -1703,6 +1712,8 @@ TEST_F(fallback_sched_ue_w_out_pucch_cfg, when_srb0_is_retx_ed_only_pucch_common
 
 TEST_F(fallback_sched_ue_w_out_pucch_cfg, when_reconf_is_after_reest_both_common_and_ded_pucch_are_scheduled)
 {
+  OCUDU_TEST_REQUIREMENTS("CU-GEN-3");
+
   const auto rnti        = to_rnti(0x4601);
   const auto du_ue_index = to_du_ue_index(0);
   ASSERT_TRUE(add_ue(rnti, du_ue_index, false, current_slot));
@@ -1848,6 +1859,8 @@ class fallback_sched_beam_test : public base_fallback_tester, public ::testing::
 protected:
   fallback_sched_beam_test() : base_fallback_tester(duplex_mode::FDD, false)
   {
+    OCUDU_TEST_REQUIREMENTS("MVP-FUNC-MIMO-16-12");
+
     const unsigned k0       = 0;
     auto           cell_req = create_custom_cell_config_request(k0);
     // A beam other than the first one, so that the assertions discriminate against a hardcoded default.

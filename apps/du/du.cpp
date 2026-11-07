@@ -325,9 +325,11 @@ int main(int argc, char** argv)
   if (o_du_app_unit->get_o_du_high_unit_config().du_high_cfg.config.is_testmode_enabled()) {
     f1c_gw = make_test_mode_f1c_connection_client();
   } else {
+    // TODO get DTLS config from CLI11.
     f1c_gw = create_f1c_client_gateway(du_cfg.f1ap_cfg.cu_cp_addresses,
                                        du_cfg.f1ap_cfg.bind_addresses,
                                        du_cfg.f1ap_cfg.sctp,
+                                       du_cfg.f1ap_cfg.dtls,
                                        du_cfg.f1ap_cfg.retry_connection,
                                        *epoll_broker,
                                        workers.get_du_high_executor_mapper().f1c_rx_executor(),

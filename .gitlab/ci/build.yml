@@ -35,7 +35,6 @@ variables:
       artifacts: false
   variables:
     TEST_EXECUTION_TIMEOUT: 0
-    CTEST_XUNIT_NAME: "ctest"
     ENABLE_SPLIT_DWARF: "True"
   script:
     - &script_functions |
@@ -224,10 +223,11 @@ variables:
     - launch_tests_ocudu_extended
   timeout: 3 hours
   after_script:
+    - xunit_name=ctest; [ -n "${OCUDU_TEST_REQUIREMENT_REPORTS}" ] && xunit_name=xunit
     - mv ${CI_PROJECT_DIR}/${OCUDU_BUILD_DIR}/coverage_1.xml    ${CI_PROJECT_DIR}/${CI_JOB_ID}_coverage_1.xml           || true
     - mv ${CI_PROJECT_DIR}/${OCUDU_BUILD_DIR}/coverage_2.xml    ${CI_PROJECT_DIR}/${CI_JOB_ID}_coverage_2.xml           || true
     - mv ${CI_PROJECT_DIR}/${OCUDU_BUILD_DIR}/coverage_3.xml    ${CI_PROJECT_DIR}/${CI_JOB_ID}_coverage_3.xml           || true
-    - mv ${CI_PROJECT_DIR}/${OCUDU_BUILD_DIR}/xunit.xml         ${CI_PROJECT_DIR}/${CI_JOB_ID}_${CTEST_XUNIT_NAME}.xml  || true
+    - mv ${CI_PROJECT_DIR}/${OCUDU_BUILD_DIR}/xunit.xml         ${CI_PROJECT_DIR}/${CI_JOB_ID}_${xunit_name}.xml        || true
     - mv ${CI_PROJECT_DIR}/${OCUDU_BUILD_DIR}/ctest_output.log  ${CI_PROJECT_DIR}/${CI_JOB_ID}_ctest_output.log         || true
   artifacts:
     when: always
@@ -235,10 +235,13 @@ variables:
       coverage_report:
         coverage_format: cobertura
         path: ${CI_JOB_ID}_coverage*.xml
-      junit: ${CI_JOB_ID}_${CTEST_XUNIT_NAME}.xml
+      junit:
+        - ${CI_JOB_ID}_ctest.xml
+        - ${CI_JOB_ID}_xunit.xml
     paths:
       - ${CI_JOB_ID}_coverage*.xml
-      - ${CI_JOB_ID}_${CTEST_XUNIT_NAME}.xml
+      - ${CI_JOB_ID}_ctest.xml
+      - ${CI_JOB_ID}_xunit.xml
       - ${CI_JOB_ID}_ctest_output.log
       - ${OCUDU_BUILD_DIR}/Testing/Temporary/MemoryChecker.*.log
     expire_in: 5 days
@@ -257,7 +260,6 @@ variables:
     ENABLE_GCOV: "True"
     MARCH: x86-64-v3
     LINKER: mold
-    CTEST_XUNIT_NAME: xunit
     OCUDU_TEST_REQUIREMENT_REPORTS: "True"
 
 .smoke relwithdeb:
@@ -279,7 +281,6 @@ variables:
 
 .smoke tsan:
   extends: .build_and_unit
-  stage: extended
   variables:
     OS: ubuntu-26.04
     COMPILER: clang
@@ -293,7 +294,6 @@ variables:
 
 .smoke asan:
   extends: .build_and_unit
-  stage: extended
   variables:
     OS: ubuntu-26.04
     COMPILER: clang
@@ -306,7 +306,6 @@ variables:
 
 .smoke rtsan:
   extends: .build_and_unit
-  stage: extended
   variables:
     OS: ubuntu-26.04
     COMPILER: clang
@@ -326,7 +325,6 @@ variables:
 
 .smoke valgrind:
   extends: .build_and_unit
-  stage: extended
   variables:
     OS: ubuntu-24.04
     COMPILER: gcc
@@ -371,7 +369,7 @@ variables:
     COMPILER: clang
     CMAKE_BUILD_TYPE: Release
     ASSERT_LEVEL: NONE
-    TEST_MODE: none
+    TEST_MODE: default
     MARCH: x86-64-v3
 
 # Combinations to use in schedules matrix
@@ -416,6 +414,7 @@ smoke old clang cached:
 
 smoke tsan cached:
   extends: .smoke tsan
+  stage: extended
   rules:
     - if: $CI_MERGE_REQUEST_LABELS =~ /ci-no-cache/
       when: never
@@ -427,6 +426,7 @@ smoke tsan cached:
 
 smoke asan cached:
   extends: .smoke asan
+  stage: extended
   rules:
     - if: $CI_MERGE_REQUEST_LABELS =~ /ci-no-cache/
       when: never
@@ -438,6 +438,7 @@ smoke asan cached:
 
 smoke rtsan cached:
   extends: .smoke rtsan
+  stage: extended
   rules:
     - if: $CI_MERGE_REQUEST_LABELS =~ /ci-no-cache/
       when: never
@@ -485,6 +486,7 @@ smoke old clang clean:
 
 smoke tsan clean:
   extends: .smoke tsan
+  stage: extended
   rules:
     - if: $CI_MERGE_REQUEST_LABELS =~ /ci-no-cache/
       when: manual
@@ -492,6 +494,7 @@ smoke tsan clean:
 
 smoke asan clean:
   extends: .smoke asan
+  stage: extended
   rules:
     - if: $CI_MERGE_REQUEST_LABELS =~ /ci-no-cache/
       when: manual
@@ -499,6 +502,7 @@ smoke asan clean:
 
 smoke rtsan clean:
   extends: .smoke rtsan
+  stage: extended
   rules:
     - if: $CI_MERGE_REQUEST_LABELS =~ /ci-no-cache/
       when: manual
@@ -577,6 +581,7 @@ intermediate commits clean:
 
 valgrind changed tests:
   extends: .smoke valgrind
+  stage: extended
   allow_failure:
     exit_codes: 124 # timeout command's exit code when the time is reached
   rules:
@@ -621,8 +626,18 @@ smoke coverage:
     - if: $CI_PIPELINE_SCHEDULE_DESCRIPTION =~ /Smoke/
     - if: $ON_PROTECTED_BRANCH
 
+smoke tsan:
+  extends: .smoke tsan
+  rules:
+    - if: $CI_PIPELINE_SCHEDULE_DESCRIPTION =~ /Nightly/
+
 smoke asan:
   extends: .smoke asan
+  rules:
+    - if: $CI_PIPELINE_SCHEDULE_DESCRIPTION =~ /Nightly/
+
+smoke valgrind:
+  extends: .smoke valgrind
   rules:
     - if: $CI_PIPELINE_SCHEDULE_DESCRIPTION =~ /Nightly/
 
@@ -630,6 +645,23 @@ smoke rtsan:
   extends: .smoke rtsan
   rules:
     - if: $CI_PIPELINE_SCHEDULE_DESCRIPTION =~ /Nightly/
+
+smoke dtls: # OpenSSL+DTLS only available in fedora now
+  extends: .build_and_unit
+  rules:
+    - if: $CI_PIPELINE_SCHEDULE_DESCRIPTION =~ /Nightly/
+  variables:
+    OS: fedora-44
+    COMPILER: gcc
+    CMAKE_BUILD_TYPE: RelWithDebInfo
+    ASSERT_LEVEL: PARANOID
+    ENABLE_WERROR: "False"
+    MARCH: x86-64-v3
+    TEST_MODE: full
+    OCUDU_TEST_REQUIREMENT_REPORTS: "True"
+  tags:
+    - ${OCUDU_RUNNER_TAG}-amd64
+    - sctp
 
 # Packaging
 

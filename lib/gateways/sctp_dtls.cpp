@@ -11,12 +11,6 @@ using namespace ocudu;
 
 #ifdef OCUDU_HAVE_OPENSSL_DTLS
 
-static int verify_callback(int ok, X509_STORE_CTX* store)
-{
-  // TODO for now, always trust.
-  return 1;
-}
-
 /// Creates an instance of a DTLS context.
 std::unique_ptr<dtls_context> ocudu::create_dtls_context(dtls_context_config cfg_)
 {
@@ -30,7 +24,8 @@ openssl_dtls_context::openssl_dtls_context(dtls_context_config cfg_) :
   report_error_if_not(cfg.key_filename != "", "Invalid DTLS key filename");
   report_error_if_not(cfg.cert_filename != "", "Invalid DTLS cert filename");
   report_error_if_not(cfg.ca_cert_filename != "", "Invalid DTLS CA cert filename");
-  logger.info("Initializing DTLS context. cert={} key={} ca_cert={}",
+  logger.info("Initializing DTLS context. mode={} cert={} key={} ca_cert={}",
+              format_as(cfg.mode),
               cfg.cert_filename,
               cfg.key_filename,
               cfg.ca_cert_filename);
@@ -100,7 +95,7 @@ bool openssl_dtls_context::init(int socket)
   }
 
   // Set verify callback.
-  SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_CLIENT_ONCE, verify_callback);
+  SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nullptr);
 
   // Create BIO to set all necessary socket options required for DTLS, e.g. SCTP-AUTH.
   // This BIO will not be used.

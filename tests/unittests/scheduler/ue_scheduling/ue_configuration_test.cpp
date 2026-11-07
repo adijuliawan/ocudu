@@ -101,7 +101,7 @@ TEST_F(ue_configuration_test, when_td_alloc_list_r16_is_configured_then_dci_tdra
               units::bits(log2_ceil(ss.bwp->dl.td_mapper().dedicated_pdsch_td_resources().size())));
     ASSERT_TRUE(ss.dci_sz.format0_1_ue_size.has_value());
     ASSERT_EQ(ss.dci_sz.format0_1_ue_size->time_resource,
-              units::bits(log2_ceil(ss.bwp->ul.td_mapper().pusch_td_resources().size())));
+              units::bits(log2_ceil(ss.bwp->ul.td_mapper().dedicated_pusch_td_resources().size())));
   }
 
   // Reconfigure the UE with Rel-16 TDRA lists that mirror the applied lists and append repetition entries.
@@ -124,7 +124,8 @@ TEST_F(ue_configuration_test, when_td_alloc_list_r16_is_configured_then_dci_tdra
     pdsch_cfg.pdsch_td_alloc_list.push_back(rep_alloc);
   }
   auto& pusch_cfg = serv_cell.ul_config->init_ul_bwp.pusch_cfg.value();
-  for (const auto& alloc : ue_cfg.search_space(to_search_space_id(2)).bwp->ul.td_mapper().pusch_td_resources()) {
+  for (const auto& alloc :
+       ue_cfg.search_space(to_search_space_id(2)).bwp->ul.td_mapper().dedicated_pusch_td_resources()) {
     pusch_cfg.pusch_td_alloc_list.push_back(alloc);
   }
   for (uint8_t rep : {2, 4, 8}) {
@@ -202,6 +203,8 @@ TEST_F(ue_configuration_test, when_reconfiguration_is_received_then_ue_updates_l
 class ue_ul_meas_gap_test : public ue_configuration_test
 {
 protected:
+  ue_ul_meas_gap_test() { OCUDU_TEST_REQUIREMENTS("DU-GEN-9"); }
+
   /// 6ms gap every 80ms, starting at subframe 10. At 15kHz there is one slot per subframe.
   static constexpr meas_gap_config test_gap{10, meas_gap_length::ms6, meas_gap_repetition_period::ms80};
 

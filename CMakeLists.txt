@@ -628,16 +628,6 @@ else (ENABLE_DPDK)
     unset(DPDK_FOUND CACHE)
 endif (ENABLE_DPDK)
 
-if(SCTP_FOUND)
-    sbom_add(
-        PACKAGE            "SCTP"
-        DOWNLOAD_LOCATION  "https://www.sctp.org/"
-        SUPPLIER           "SCTP project"
-        LICENSE            "BSD-3-Clause"
-        VERSION            ${PC_SCTP_VERSION}
-    )
-endif (SCTP_FOUND)
-
 # FlatBuffers, fetched at build time by the scheduler event tracer. Being fetched, it has no entry in
 # COPYRIGHTS.txt for parse_copyright_file() to pick up, so it is added to the SBOM here.
 if (ENABLE_SCHEDTRACE)
@@ -650,6 +640,20 @@ if (ENABLE_SCHEDTRACE)
         VERSION            ${FLATBUFFERS_VERSION}
     )
 endif (ENABLE_SCHEDTRACE)
+
+find_package(Eigen3 NO_MODULE)
+if (Eigen3_FOUND)
+    message("-- Found Eigen3")
+    sbom_add(
+        PACKAGE            "Eigen3"
+        DOWNLOAD_LOCATION  "https://libeigen.gitlab.io/"
+        SUPPLIER           "The Eigen Authors"
+        LICENSE            "MPL-2.0"
+        VERSION            ${Eigen3_VERSION}
+    )
+else (Eigen3_FOUND)
+    message("-- Could not find Eigen3")
+endif (Eigen3_FOUND)
 
 ########################################################################
 # Instruction Set Architecture setup

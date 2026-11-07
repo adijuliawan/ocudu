@@ -79,7 +79,8 @@ public:
     ASSERT_NO_FATAL_FAILURE(tracker.on_new_result(res_grid[0].slot, res_grid[0].result));
   }
 
-  void handle_rach_indication(rach_indication_message ind)
+  /// \param occasion_slot_delay Slots between the PRACH occasion and the slot the lower layers report it in.
+  void handle_rach_indication(rach_indication_message ind, unsigned occasion_slot_delay = 0)
   {
     // Advance the simulator to a slot that has a valid PRACH occasion. The ra_scheduler only
     // prereserves MsgA PUSCH for slots whose corresponding PRACH slot is a valid occasion per
@@ -92,8 +93,9 @@ public:
     run_slot_until([this, &prach_mapper]() { return prach_mapper.has_prach_occasion(next_slot_rx()); });
     ind.slot_rx = next_slot_rx();
     if (not ind.occasions.empty()) {
-      // The occasion index tracks the slot_rx just selected above.
-      ind.occasions[0].slot_index = test_helper::compute_prach_occasion_slot_index(cell_cfg, ind.slot_rx);
+      // The lower layers report the t_id of the occasion, which may precede the slot they report it in.
+      ind.occasions[0].slot_index =
+          test_helper::compute_prach_occasion_slot_index(cell_cfg, ind.slot_rx - occasion_slot_delay);
     }
     ra_sch.handle_rach_indication(ind);
     tracker.on_new_rach_ind(ind);
@@ -202,6 +204,7 @@ public:
   ra_scheduler_common_test() :
     ra_scheduler_setup(get_sched_req(GetParam()), GetParam().sched_csi_rs, GetParam().sched_sib1)
   {
+    OCUDU_TEST_REQUIREMENTS("MVP-FUNC-RACH-16-1", "DU-GEN-2-a");
   }
 
   static sched_cell_configuration_request_message get_sched_req(const test_params& t_params)
@@ -223,17 +226,12 @@ TEST_P(ra_scheduler_common_test, when_no_rach_indication_received_then_no_rar_al
 
 /// \brief The RA-RNTI comes from the reported occasion slot index, not from the indication slot.
 ///
-/// The RAR is only matched if the scheduler and the tracker both take t_id from the occasion.
+/// The lower layers own t_id, as per TS 38.321, Section 5.1.3. The RAR is only matched if the scheduler and the tracker
+/// both take t_id from the occasion.
 TEST_P(ra_scheduler_common_test, when_occasion_slot_index_differs_from_rx_slot_then_ra_rnti_uses_the_occasion)
 {
-  handle_rach_indication(create_rach_indication(1));
-
-  // The t_id is counted in the PRACH subcarrier spacing, so it only differs from the indication slot when that is
-  // coarser than the cell's, which not every configuration under test provides.
-  const slot_point prach_slot_rx = next_slot_rx();
-  if (test_helper::compute_prach_occasion_slot_index(cell_cfg, prach_slot_rx) == prach_slot_rx.slot_index()) {
-    GTEST_SKIP() << "This PRACH configuration counts the t_id in the slot's own numerology, so the two coincide";
-  }
+  // A one subframe shift changes t_id in any numerology, so it never matches the one derived from slot_rx.
+  handle_rach_indication(create_rach_indication(1), get_nof_slots_per_subframe(cell_cfg.scs_common()));
 
   for (unsigned slot_count = 0, max_slot_count = 1000; slot_count < max_slot_count and tracker.nof_msg3_acked() == 0;
        ++slot_count) {
@@ -361,25 +359,27 @@ TEST_P(ra_scheduler_common_test, when_crc_is_ko_then_msg3_retx_is_scheduled)
 }
 
 using tdd_fr1_30khz = tdd_pattern_profile_fr1_30khz;
-INSTANTIATE_TEST_SUITE_P(
-    ra_scheduler,
-    ra_scheduler_common_test,
-    ::testing::Values(
-        // FR1, FDD.
-        test_params{frequency_range::FR1, 2},
-        test_params{frequency_range::FR1, 4},
-        test_params{frequency_range::FR1, 4, std::nullopt, true},
-        // FR1, TDD.
-        test_params{frequency_range::FR1, 2, create_tdd_pattern(tdd_fr1_30khz::DDDDDDDSUU)},
-        test_params{frequency_range::FR1, 4, create_tdd_pattern(tdd_fr1_30khz::DDDDDDDSUU)},
-        test_params{frequency_range::FR1, 2, create_tdd_pattern(tdd_fr1_30khz::DDDSU)},
-        test_params{frequency_range::FR1, 1, create_tdd_pattern(tdd_fr1_30khz::DSUU)},
-        test_params{frequency_range::FR1, 2, create_tdd_pattern(tdd_fr1_30khz::DDDDDDDSUU), true},
-        test_params{frequency_range::FR1, 2, create_tdd_pattern(tdd_fr1_30khz::DDDDDDDSUU), true, true},
-        test_params{frequency_range::FR1, 2, create_tdd_pattern(tdd_pattern_profile_fr1_30khz::DDDSU), true, true},
-        // FR2, TDD.
-        test_params{frequency_range::FR2, 1, create_tdd_pattern(tdd_pattern_profile_fr2_120khz::DDDSU)},
-        test_params{frequency_range::FR2, 1, create_tdd_pattern(tdd_pattern_profile_fr2_120khz::DDDSU), true}));
+
+static std::vector<test_params> get_test_params()
+{
+  return {// FR1, FDD.
+          test_params{frequency_range::FR1, 2},
+          test_params{frequency_range::FR1, 4},
+          test_params{frequency_range::FR1, 4, std::nullopt, true},
+          // FR1, TDD.
+          test_params{frequency_range::FR1, 2, create_tdd_pattern(tdd_fr1_30khz::DDDDDDDSUU)},
+          test_params{frequency_range::FR1, 4, create_tdd_pattern(tdd_fr1_30khz::DDDDDDDSUU)},
+          test_params{frequency_range::FR1, 2, create_tdd_pattern(tdd_fr1_30khz::DDDSU)},
+          test_params{frequency_range::FR1, 1, create_tdd_pattern(tdd_fr1_30khz::DSUU)},
+          test_params{frequency_range::FR1, 2, create_tdd_pattern(tdd_fr1_30khz::DDDDDDDSUU), true},
+          test_params{frequency_range::FR1, 2, create_tdd_pattern(tdd_fr1_30khz::DDDDDDDSUU), true, true},
+          test_params{frequency_range::FR1, 2, create_tdd_pattern(tdd_pattern_profile_fr1_30khz::DDDSU), true, true},
+          // FR2, TDD.
+          test_params{frequency_range::FR2, 1, create_tdd_pattern(tdd_pattern_profile_fr2_120khz::DDDSU)},
+          test_params{frequency_range::FR2, 1, create_tdd_pattern(tdd_pattern_profile_fr2_120khz::DDDSU), true}};
+}
+
+INSTANTIATE_TEST_SUITE_P(ra_scheduler, ra_scheduler_common_test, ::testing::ValuesIn(get_test_params()));
 
 /// RA procedure in an NTN cell, where every DL-signalled UL transmission is delayed by the cell-specific Koffset.
 class ra_scheduler_ntn_test : public ra_scheduler_setup, public ::testing::Test
@@ -458,6 +458,7 @@ public:
   ra_scheduler_failed_rar_test() :
     ra_scheduler_setup(get_sched_req(GetParam()), GetParam().sched_csi_rs, GetParam().sched_sib1)
   {
+    OCUDU_TEST_REQUIREMENTS("MVP-FUNC-RACH-16-1", "DU-GEN-2-a");
   }
 
   static sched_cell_configuration_request_message get_sched_req(const test_params& t_params)
@@ -586,6 +587,7 @@ public:
                                       unsigned             duration_ms   = 40) :
     ra_scheduler_setup(make_sched_cfg(snr_threshold_dB, max_preambles, duration_ms), get_sched_req(), false, false)
   {
+    OCUDU_TEST_REQUIREMENTS("MVP-FUNC-RACH-16-1", "DU-GEN-2-a");
   }
 
   static scheduler_expert_config
@@ -759,7 +761,10 @@ static beam_identifier beam_of(const precoding_and_beamforming_info& info)
 class ra_scheduler_beam_test : public ra_scheduler_setup, public ::testing::Test
 {
 public:
-  ra_scheduler_beam_test() : ra_scheduler_setup(make_beam_req(), /*sched_csi=*/false, /*sched_sib1=*/false) {}
+  ra_scheduler_beam_test() : ra_scheduler_setup(make_beam_req(), /*sched_csi=*/false, /*sched_sib1=*/false)
+  {
+    OCUDU_TEST_REQUIREMENTS("MVP-FUNC-MIMO-16-12");
+  }
 
   static sched_cell_configuration_request_message make_beam_req()
   {
@@ -826,6 +831,7 @@ public:
 
   ra_scheduler_multi_beam_test() : ra_scheduler_setup(make_multi_beam_req(), /*sched_csi=*/false, /*sched_sib1=*/false)
   {
+    OCUDU_TEST_REQUIREMENTS("MVP-FUNC-MIMO-16-12");
   }
 
   static sched_cell_configuration_request_message make_multi_beam_req()
@@ -888,6 +894,7 @@ public:
                        /*sched_csi=*/false,
                        /*sched_sib1=*/false)
   {
+    OCUDU_TEST_REQUIREMENTS("MVP-FUNC-MIMO-16-12");
   }
 
   static scheduler_expert_config make_sched_cfg()
@@ -963,6 +970,7 @@ public:
   ra_scheduler_two_step_rach_test() :
     ra_scheduler_setup(make_two_step_rach_req(GetParam()), /*sched_csi=*/false, /*sched_sib1=*/false)
   {
+    OCUDU_TEST_REQUIREMENTS("MVP-FUNC-RACH-16-2", "DU-GEN-2-a");
   }
 
   static sched_cell_configuration_request_message make_two_step_rach_req(const two_step_test_params& params)
@@ -1274,6 +1282,8 @@ class ra_scheduler_cfra_test : public ra_scheduler_setup, public ::testing::Test
 public:
   ra_scheduler_cfra_test() : ra_scheduler_setup(make_cfra_sched_req(), false, false)
   {
+    OCUDU_TEST_REQUIREMENTS("MVP-FUNC-RACH-16-1", "DU-GEN-2-b");
+
     // The RA scheduler classifies a CRC as a CFRA Msg3 by looking the C-RNTI up in the cell UE repository, so the
     // CFRA UE must be registered there.
     auto ue_req                    = sched_config_helper::create_default_sched_ue_creation_request(cell_cfg.params);
@@ -1351,6 +1361,8 @@ public:
   ra_scheduler_cfra_uci_on_msg3_test() :
     ra_scheduler_setup(make_expert_cfg(GetParam()), make_cfra_sched_req(), false, false)
   {
+    OCUDU_TEST_REQUIREMENTS("MVP-FUNC-RACH-16-1", "DU-GEN-2-b");
+
     auto ue_req                    = sched_config_helper::create_default_sched_ue_creation_request(cell_cfg.params);
     ue_req.ue_index                = cfra_ue_index;
     ue_req.crnti                   = cfra_crnti;

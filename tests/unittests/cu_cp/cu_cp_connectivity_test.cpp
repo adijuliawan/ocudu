@@ -6,6 +6,7 @@
 #include "tests/test_doubles/e1ap/e1ap_cu_cp_test_messages.h"
 #include "tests/test_doubles/e1ap/e1ap_test_message_validators.h"
 #include "tests/test_doubles/f1ap/f1ap_test_message_validators.h"
+#include "tests/test_doubles/f1ap/f1ap_test_messages.h"
 #include "tests/test_doubles/ngap/ngap_test_message_validators.h"
 #include "tests/test_doubles/rrc/rrc_test_messages.h"
 #include "tests/unittests/ngap/ngap_test_messages.h"
@@ -454,6 +455,42 @@ TEST_F(cu_cp_connectivity_test, when_new_f1_setup_request_is_received_and_ng_is_
   ASSERT_EQ(report.dus[0].cells.size(), 1);
 }
 
+TEST_F(cu_cp_connectivity_test, when_one_cell_of_a_du_has_an_unsupported_plmn_then_only_that_cell_is_not_activated)
+{
+  // Run NG setup to completion.
+  run_ng_setup();
+
+  // A DU with two cells, the second one serving a PLMN the CU-CP does not support.
+  test_helpers::served_cell_item_info served_cell;
+  test_helpers::served_cell_item_info foreign_cell;
+  foreign_cell.plmn_id  = plmn_identity::parse("00102").value();
+  foreign_cell.nci      = nr_cell_identity::create(gnb_id_t{411, 22}, 1).value();
+  foreign_cell.pci      = 7;
+  foreign_cell.sib1_str = test_helpers::create_sib1_hex_string(foreign_cell.plmn_id);
+
+  auto ret = connect_new_du();
+  ASSERT_TRUE(ret.has_value());
+  unsigned du_idx = *ret;
+  get_du(du_idx).push_ul_pdu(
+      test_helpers::generate_f1_setup_request(int_to_gnb_du_id(0x11), {served_cell, foreign_cell}));
+
+  f1ap_message f1ap_pdu;
+  ASSERT_TRUE(this->wait_for_f1ap_tx_pdu(du_idx, f1ap_pdu, std::chrono::milliseconds{1000}));
+
+  // The CU-CP accepts the DU and activates only the cell it can serve.
+  ASSERT_EQ(f1ap_pdu.pdu.type().value, asn1::f1ap::f1ap_pdu_c::types_opts::successful_outcome);
+  const auto& resp = f1ap_pdu.pdu.successful_outcome().value.f1_setup_resp();
+  ASSERT_TRUE(resp->cells_to_be_activ_list_present);
+  ASSERT_EQ(resp->cells_to_be_activ_list.size(), 1U);
+  ASSERT_EQ(resp->cells_to_be_activ_list[0]->cells_to_be_activ_list_item().nr_cgi.nr_cell_id.to_number(),
+            served_cell.nci.value());
+
+  // The CU-CP does not serve the cell with the unsupported PLMN at all.
+  auto report = this->get_cu_cp().get_metrics_handler().request_metrics_report();
+  ASSERT_EQ(report.dus.size(), 1);
+  ASSERT_EQ(report.dus[0].cells.size(), 1);
+}
+
 TEST_F(cu_cp_connectivity_test, when_dus_with_duplicate_du_ids_connect_then_f1_setup_is_rejected)
 {
   // Run NG setup to completion.
@@ -579,7 +616,7 @@ TEST_F(
   ASSERT_TRUE(ret.has_value());
 }
 
-TEST_F(cu_cp_connectivity_test, when_ng_setup_is_not_successful_then_f1_setup_is_rejected)
+TEST_F(cu_cp_connectivity_test, when_ng_setup_is_not_successful_then_f1_setup_is_accepted_with_no_cell_activated)
 {
   // Enqueue AMF NG Setup Response as an auto reply to CU-CP.
   ngap_message ng_setup_fail = generate_ng_setup_failure();
@@ -596,8 +633,69 @@ TEST_F(cu_cp_connectivity_test, when_ng_setup_is_not_successful_then_f1_setup_is
   f1ap_message f1ap_pdu;
   ASSERT_TRUE(this->wait_for_f1ap_tx_pdu(du_idx, f1ap_pdu, std::chrono::milliseconds{1000}));
 
-  // The CU-CP should reject F1 setup.
-  ASSERT_EQ(f1ap_pdu.pdu.type().value, asn1::f1ap::f1ap_pdu_c::types_opts::unsuccessful_outcome);
+  // The CU-CP accepts the DU, but keeps all of its cells deactivated.
+  ASSERT_EQ(f1ap_pdu.pdu.type().value, asn1::f1ap::f1ap_pdu_c::types_opts::successful_outcome);
+  ASSERT_EQ(f1ap_pdu.pdu.successful_outcome().value.type().value,
+            asn1::f1ap::f1ap_elem_procs_o::successful_outcome_c::types_opts::f1_setup_resp);
+  ASSERT_FALSE(f1ap_pdu.pdu.successful_outcome().value.f1_setup_resp()->cells_to_be_activ_list_present);
+}
+
+TEST_F(cu_cp_connectivity_test, when_amf_connects_after_f1_setup_then_the_cells_of_the_du_are_activated)
+{
+  // Simulate an AMF that is not reachable yet.
+  get_amf().drop_connection();
+  ASSERT_TRUE(get_cu_cp().start());
+
+  // Establish TNL connection between DU and CU-CP and start F1 setup procedure.
+  auto ret = connect_new_du();
+  ASSERT_TRUE(ret.has_value());
+  unsigned du_idx = *ret;
+  get_du(du_idx).push_ul_pdu(test_helpers::generate_f1_setup_request());
+  f1ap_message f1ap_pdu;
+  ASSERT_TRUE(this->wait_for_f1ap_tx_pdu(du_idx, f1ap_pdu, std::chrono::milliseconds{1000}));
+
+  // The CU-CP accepts the DU, but keeps all of its cells deactivated.
+  ASSERT_EQ(f1ap_pdu.pdu.type().value, asn1::f1ap::f1ap_pdu_c::types_opts::successful_outcome);
+  ASSERT_FALSE(f1ap_pdu.pdu.successful_outcome().value.f1_setup_resp()->cells_to_be_activ_list_present);
+
+  // The AMF becomes reachable. The CU-CP must activate the cells that serve its PLMN.
+  ASSERT_TRUE(reconnect_amf(0)) << "CU-CP did not retry the AMF connection";
+  ASSERT_TRUE(this->wait_for_f1ap_tx_pdu(du_idx, f1ap_pdu, std::chrono::milliseconds{1000}))
+      << "gNB-CU Configuration Update not sent to DU after the AMF connected";
+  ASSERT_TRUE(test_helpers::is_valid_gnb_cu_configuration_update(f1ap_pdu));
+  const auto& cu_cfg_upd = f1ap_pdu.pdu.init_msg().value.gnb_cu_cfg_upd();
+  ASSERT_TRUE(cu_cfg_upd->cells_to_be_activ_list_present);
+  ASSERT_EQ(cu_cfg_upd->cells_to_be_activ_list.size(), 1U);
+  get_du(du_idx).push_ul_pdu(test_helpers::generate_gnb_cu_configuration_update_acknowledgement({}));
+}
+
+TEST_F(cu_cp_connectivity_test, when_the_du_deletes_a_cell_then_its_ues_are_released)
+{
+  run_ng_setup();
+
+  auto ret = connect_new_du();
+  ASSERT_TRUE(ret.has_value());
+  unsigned du_idx = *ret;
+  ASSERT_TRUE(this->run_f1_setup(du_idx));
+
+  ret = connect_new_cu_up();
+  ASSERT_TRUE(ret.has_value());
+  ASSERT_TRUE(this->run_e1_setup(*ret));
+
+  gnb_du_ue_f1ap_id_t du_ue_f1ap_id = int_to_gnb_du_ue_f1ap_id(0);
+  rnti_t              crnti         = to_rnti(0x4601);
+  ASSERT_TRUE(connect_new_ue(du_idx, du_ue_f1ap_id, crnti));
+
+  // The DU stops serving the cell the UE camps on.
+  const test_helpers::served_cell_item_info cell;
+  get_du(du_idx).push_ul_pdu(test_helpers::generate_gnb_du_configuration_update(
+      int_to_gnb_du_id(0x11), {}, {}, {nr_cell_global_id_t{cell.plmn_id, cell.nci}}));
+
+  // The CU-CP releases the UE of the deleted cell.
+  f1ap_message f1ap_pdu;
+  ASSERT_TRUE(this->wait_for_f1ap_tx_pdu(du_idx, f1ap_pdu, std::chrono::milliseconds{1000}));
+  ASSERT_TRUE(test_helpers::is_valid_ue_context_release_command(f1ap_pdu))
+      << "the UEs of a deleted cell must be released";
 }
 
 TEST_F(cu_cp_connectivity_test, when_du_connection_is_lost_then_connected_ues_are_released)

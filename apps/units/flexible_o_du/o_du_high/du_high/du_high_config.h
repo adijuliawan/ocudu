@@ -146,6 +146,8 @@ struct du_high_unit_ref_beam_config {
   /// \brief Identifier that the reference signals of the cell use to select this beam.
   /// \remark Not to be confused with \c beam_identifier, the beam that the RAN and PHY layers transmit on.
   unsigned ref_beam_id = 0;
+  /// Index of the antenna panel that forms the beam.
+  unsigned i_panel = 0;
   /// Beam polarization index.
   unsigned i_pol = 0;
   /// First dimension beam index, parameter \f$l\f$ of TS 38.214 Section 5.2.2.2.
@@ -306,8 +308,13 @@ struct du_high_unit_pusch_config {
   pusch_mcs_table mcs_table = pusch_mcs_table::qam256;
   /// \brief Maximum number of PUSCH repetitions offered in the dedicated Rel-16 TDRA list of supporting UEs. Value 1
   /// disables dynamic PUSCH repetitions. Values: {1, 2, 3, 4, 7, 8, 12, 16}.
-  /// \note Not currently exposed via CLI11/YAML; PUSCH repetitions are not yet handled by the scheduler.
   unsigned max_nof_rep = 1;
+  /// \brief SINR threshold, in dB, below which the scheduler uses PUSCH repetitions for supporting UEs. The
+  /// effective SINR is compared against this value. If not set, SINR-triggered repetitions are disabled.
+  std::optional<float> sinr_rep_threshold;
+  /// \brief If true, PUSCH repetitions are used for all supporting UEs regardless of the estimated SINR. Intended
+  /// for testing in setups without RF impairments, where the SINR never drops below \c sinr_rep_threshold.
+  bool force_rep = false;
   /// \c msg3-DeltaPreamble, TS 38.331. Values: {-1,...,6}.
   int msg3_delta_preamble = 6;
   /// \c p0-NominalWithGrant, TS 38.331. Value in dBm. Only even values allowed within {-202,...,24}.
@@ -453,8 +460,8 @@ struct du_high_unit_pucch_config {
   unsigned nof_cell_csi_resources = 8;
 
   /// \brief \c SR period in milliseconds.
-  /// Among all values given in \c periodicityAndOffset, part of \c \SchedulingRequestResourceConfig, TS 38.331,
-  /// these are the only ones supported. Values: {1, 2, 2.5, 4, 5, 8, 10, 16, 20, 40, 80, 160, 320}.
+  /// Among all values given in \c periodicityAndOffset, part of \c SchedulingRequestResourceConfig, TS 38.331,
+  /// these are the only ones supported. Values: {1, 2, 2.5, 4, 5, 8, 10, 16, 20, 40, 80}.
   float sr_period_msec = 20.0F;
 
   /// PUCCH F0 resource parameter.
@@ -1189,7 +1196,8 @@ struct mac_phr_unit_config {
 /// MAC Scheduler Request configuration.
 struct mac_sr_unit_config {
   /// \brief \c sr-ProhibitTimer, or timer for SR transmission on PUCCH.
-  /// Values are in ms. Values: {1, 2, 4, 8, 16, 32, 64, 128}. When the field is absent, the UE applies the value 0.
+  /// Values are in ms. Values: {1, 2, 4, 8, 16, 32, 64, 128}, and {192, 256, 320, 384, 448, 512, 576, 640, 1082} for
+  /// NTN (\c sr-ProhibitTimer-v1700). When the field is absent, the UE applies the value 0.
   std::optional<unsigned> sr_prohibit_timer;
   /// \brief \c sr-TransMax possible values, or maximum number of SR transmissions.
   /// Values: {4, 8, 16, 32, 64}.

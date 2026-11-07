@@ -66,6 +66,8 @@ public:
     return activate;
   }
 
+  void on_du_cells_removed(span<const nr_cell_identity> cells) override {}
+
   void on_rrc_ue_created(cu_cp_ue_index_t ue_index, rrc_ue_interface& rrc_ue) override
   {
     logger.info("ue={}: Received a RRC UE creation notification", ue_index);
@@ -226,7 +228,10 @@ private:
 class dummy_du_connection_notifier : public du_connection_notifier
 {
 public:
-  bool on_du_setup_request(const std::set<plmn_identity>& plmn_ids) override { return true; }
+  std::set<plmn_identity> on_connected_plmns_required(const std::set<plmn_identity>& plmn_ids) override
+  {
+    return plmn_ids;
+  }
 };
 
 class dummy_cu_cp_ref_time_report_notifier : public cu_cp_ref_time_report_notifier
@@ -802,6 +807,8 @@ public:
   }
 
   void update_meas_config(const rrc_meas_cfg& /* cfg */) override {}
+
+  std::optional<rrc_meas_cfg> get_meas_config() override { return std::nullopt; }
 
   std::optional<uint8_t> get_serving_cell_mo() override
   {

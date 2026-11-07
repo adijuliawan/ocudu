@@ -181,14 +181,78 @@ pdu_session_resource_modify_validation_outcome ocudu::ocucp::verify_pdu_session_
     }
   }
 
+  // Check that the IEs required by the QoS parameters of the QoS flows to add or modify are present, as per
+  // TS 38.413 section 8.2.3.4.
+  for (const auto& psi : psis) {
+    const auto& modify_item = request.pdu_session_res_modify_items[psi];
+
+    // Collect the QoS flows whose QoS parameters lack a required IE.
+    ngap_pdu_session_resource_modify_response_item response_item;
+    response_item.pdu_session_id = psi;
+    auto& failed_qos_flows       = response_item.transfer.qos_flow_failed_to_add_or_modify_list;
+    for (const auto& qos_flow_item : modify_item.transfer.qos_flow_add_or_modify_request_list) {
+      if (has_required_qos_companion_ies(qos_flow_item.qos_flow_level_qos_params)) {
+        continue;
+      }
+      ue_logger.log_warning("Incomplete QoS parameters for {} of {}", qos_flow_item.qos_flow_id, psi);
+      ngap_qos_flow_failed_to_setup_item failed_qos_flow;
+      failed_qos_flow.qos_flow_id = qos_flow_item.qos_flow_id;
+      failed_qos_flow.cause       = ngap_cause_radio_network_t::invalid_qos_combination;
+      failed_qos_flows.emplace(failed_qos_flow.qos_flow_id, failed_qos_flow);
+    }
+
+    if (!failed_qos_flows.empty() &&
+        failed_qos_flows.size() == modify_item.transfer.qos_flow_add_or_modify_request_list.size()) {
+      // If all QoS flows to add or modify fail, then the whole PDU session fails.
+      failed_psis.emplace(psi);
+      ngap_pdu_session_res_setup_failed_item failed_item;
+      failed_item.pdu_session_id              = psi;
+      failed_item.unsuccessful_transfer.cause = ngap_cause_radio_network_t::invalid_qos_combination;
+      verification_outcome.response.pdu_session_res_failed_to_modify_list.emplace(psi, failed_item);
+      continue;
+    }
+
+    // Collect the QoS flows that the request adds or modifies and releases at the same time. The PDU session is
+    // modified without them and they keep their current configuration.
+    for (const auto& qos_flow_item : modify_item.transfer.qos_flow_add_or_modify_request_list) {
+      if (!modify_item.transfer.qos_flow_to_release_list.contains(qos_flow_item.qos_flow_id)) {
+        continue;
+      }
+      ue_logger.log_warning(
+          "{} of {} is added or modified and released in the same request", qos_flow_item.qos_flow_id, psi);
+      ngap_qos_flow_failed_to_setup_item failed_qos_flow;
+      failed_qos_flow.qos_flow_id = qos_flow_item.qos_flow_id;
+      failed_qos_flow.cause       = ngap_cause_radio_network_t::multiple_qos_flow_id_instances;
+      failed_qos_flows.emplace(failed_qos_flow.qos_flow_id, failed_qos_flow);
+    }
+
+    if (failed_qos_flows.empty()) {
+      continue;
+    }
+    // The remaining QoS flows are added or modified, so report the failed ones in the response.
+    verification_outcome.response.pdu_session_res_modify_list.emplace(psi, std::move(response_item));
+  }
+
   // Remove failed psis from psis.
   for (const auto& failed_psi : failed_psis) {
     psis.erase(failed_psi);
   }
 
-  // Add remaining PDU sessions to verified request.
+  // Add remaining PDU sessions to verified request, leaving out the QoS flows that failed the verification.
   for (const auto& psi : psis) {
-    verification_outcome.request.pdu_session_res_modify_items.emplace(psi, request.pdu_session_res_modify_items[psi]);
+    auto& modify_item = verification_outcome.request.pdu_session_res_modify_items.emplace(
+        psi, request.pdu_session_res_modify_items[psi]);
+    if (verification_outcome.response.pdu_session_res_modify_list.contains(psi)) {
+      for (const auto& failed_qos_flow : verification_outcome.response.pdu_session_res_modify_list[psi]
+                                             .transfer.qos_flow_failed_to_add_or_modify_list) {
+        modify_item.transfer.qos_flow_add_or_modify_request_list.erase(failed_qos_flow.qos_flow_id);
+        // A QoS flow that the request adds or modifies and releases at the same time keeps its current
+        // configuration, so it is not released either.
+        if (failed_qos_flow.cause == ngap_cause_t{ngap_cause_radio_network_t::multiple_qos_flow_id_instances}) {
+          modify_item.transfer.qos_flow_to_release_list.erase(failed_qos_flow.qos_flow_id);
+        }
+      }
+    }
   }
   verification_outcome.request.ue_index = request.ue_index;
 

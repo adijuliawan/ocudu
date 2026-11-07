@@ -15,6 +15,7 @@
 #include "ocudu/ran/pucch/pucch_constants.h"
 #include "ocudu/ran/pucch/pucch_info.h"
 #include "ocudu/ran/pucch/pucch_mapping.h"
+#include "ocudu/ran/pusch/pusch_constants.h"
 #include "ocudu/ran/rb_id.h"
 #include "ocudu/ran/ssb/ssb_mapping.h"
 #include "ocudu/ran/transform_precoding/transform_precoding_helpers.h"
@@ -449,6 +450,19 @@ static bool validate_pusch_cell_unit_config(const du_high_unit_pusch_config& con
     return false;
   }
 
+  // The PHY bounds how much it soft-combines, and a repetition counts the same as a retransmission.
+  const unsigned nof_soft_combined_txs = (1U + config.max_nof_harq_retxs) * config.max_nof_rep;
+  if (nof_soft_combined_txs > pusch_constants::MAX_NOF_SOFT_COMBINED_PUSCH_TXS) {
+    fmt::print("Invalid PUSCH repetition configuration. A transport block would be transmitted up to {} times "
+               "((1 + max_nof_harq_retxs={}) * max_nof_rep={}), above the {} receptions the receiver can combine. "
+               "Lower max_nof_rep or max_nof_harq_retxs.\n",
+               nof_soft_combined_txs,
+               config.max_nof_harq_retxs,
+               config.max_nof_rep,
+               pusch_constants::MAX_NOF_SOFT_COMBINED_PUSCH_TXS);
+    return false;
+  }
+
   if (config.max_rb_size < config.min_rb_size) {
     fmt::print("Invalid UE PUSCH RB range [{}, {}). The min_rb_size must be less or equal to the max_rb_size.\n",
                config.min_rb_size,
@@ -628,8 +642,56 @@ static bool validate_ntn_neighbor_cells(const du_high_unit_cell_ntn_config& ntn_
   return valid;
 }
 
-static bool validate_ntn_config(const du_high_unit_cell_ntn_config& ntn_cfg, nr_band band)
+/// \brief Validates that the SR retransmissions of a UE in an NTN cell outlast the round trip of the uplink grant.
+/// \param sr_cfg SR configuration of the cell.
+/// \param sr_period_msec Period of the SR opportunities.
+/// \param koffset \c cell_specific_koffset, i.e. the round trip.
+static bool
+validate_ntn_sr_config(const mac_sr_unit_config& sr_cfg, float sr_period_msec, std::chrono::milliseconds koffset)
 {
+  // The UE retransmits at the first SR opportunity after sr-ProhibitTimer expires (TS 38.321, Section 5.4.4). An absent
+  // sr-ProhibitTimer means it retransmits at every SR opportunity.
+  const float sr_prohibit_msec    = static_cast<float>(sr_cfg.sr_prohibit_timer.value_or(0));
+  const float sr_retx_period_msec = sr_period_msec * std::max(1.0F, std::ceil(sr_prohibit_msec / sr_period_msec));
+  const float sr_budget_msec      = sr_retx_period_msec * static_cast<float>(sr_cfg.sr_trans_max);
+  const float koffset_msec        = static_cast<float>(koffset.count());
+  // SR transmissions spent while the grant is in flight, the first one included.
+  const unsigned sr_tx_in_flight = static_cast<unsigned>(std::floor(koffset_msec / sr_retx_period_msec)) + 1U;
+
+  if (sr_budget_msec <= koffset_msec) {
+    fmt::print("Warning: mac_cell_group.sr_cfg.sr_trans_max={} SR transmissions, one every {}ms "
+               "(pucch.sr_period_ms={}, mac_cell_group.sr_cfg.sr_prohibit_timer={}), last {}ms, less than "
+               "ntn.cell_specific_koffset={}ms, so the UE may fall back to random access before the grant arrives. "
+               "Increase pucch.sr_period_ms, mac_cell_group.sr_cfg.sr_prohibit_timer or "
+               "mac_cell_group.sr_cfg.sr_trans_max.\n",
+               sr_cfg.sr_trans_max,
+               sr_retx_period_msec,
+               sr_period_msec,
+               sr_prohibit_msec,
+               sr_budget_msec,
+               koffset.count());
+  } else if (2 * sr_tx_in_flight > sr_cfg.sr_trans_max) {
+    fmt::print("An SR uses {} of the mac_cell_group.sr_cfg.sr_trans_max={} transmissions, one every {}ms "
+               "(pucch.sr_period_ms={}, mac_cell_group.sr_cfg.sr_prohibit_timer={}), within "
+               "ntn.cell_specific_koffset={}ms, more than half. Increase pucch.sr_period_ms, "
+               "mac_cell_group.sr_cfg.sr_prohibit_timer or mac_cell_group.sr_cfg.sr_trans_max.\n",
+               sr_tx_in_flight,
+               sr_cfg.sr_trans_max,
+               sr_retx_period_msec,
+               sr_period_msec,
+               sr_prohibit_msec,
+               koffset.count());
+    return false;
+  }
+
+  return true;
+}
+
+/// Validates the NTN config of a cell in an NTN band. Returns true on success, otherwise false.
+static bool validate_ntn_config(const du_high_unit_base_cell_config& cell_cfg, nr_band band)
+{
+  const du_high_unit_cell_ntn_config& ntn_cfg = *cell_cfg.ntn_cfg;
+
   if (!ntn_cfg.serving) {
     fmt::print("ntn: NTN parameters must be set for a cell in NTN band {}.\n", fmt::underlying(band));
     return false;
@@ -683,6 +745,11 @@ static bool validate_ntn_config(const du_high_unit_cell_ntn_config& ntn_cfg, nr_
 
   if (serving.ta_report_sr_enabled and not serving.ta_report_offset_threshold.has_value()) {
     fmt::print("ntn.ta_report_sr_enabled requires ntn.ta_report_offset_threshold to be set.\n");
+    valid = false;
+  }
+
+  if (not validate_ntn_sr_config(
+          cell_cfg.mcg_cfg.sr_cfg, cell_cfg.pucch_cfg.sr_period_msec, serving.cell_specific_koffset)) {
     valid = false;
   }
 
@@ -752,8 +819,7 @@ static bool validate_ntn_config(const du_high_unit_cell_ntn_config& ntn_cfg, nr_
 static bool validate_pucch_cell_unit_config(const du_high_unit_base_cell_config&                config,
                                             subcarrier_spacing                                  scs_common,
                                             unsigned                                            nof_crbs,
-                                            const std::optional<du_high_unit_tdd_ul_dl_config>& tdd_cfg,
-                                            bool                                                is_ntn_band)
+                                            const std::optional<du_high_unit_tdd_ul_dl_config>& tdd_cfg)
 {
   const du_high_unit_pucch_config& pucch_cfg = config.pucch_cfg;
   const du_high_unit_csi_config&   csi_cfg   = config.csi_cfg;
@@ -804,16 +870,14 @@ static bool validate_pucch_cell_unit_config(const du_high_unit_base_cell_config&
       return false;
     }
   }
-  if (!is_ntn_band) {
-    span<const unsigned> valid_sr_period_slots = mu_to_valid_sr_period_slots_lookup.at(to_numerology_value(scs_common));
-    if (std::find(valid_sr_period_slots.begin(), valid_sr_period_slots.end(), sr_period_slots) ==
-        valid_sr_period_slots.end()) {
-      fmt::print("SR period of {}ms (i.e. {} slots) is not valid for {}kHz SCS.\n",
-                 pucch_cfg.sr_period_msec,
-                 sr_period_slots,
-                 scs_to_khz(scs_common));
-      return false;
-    }
+  span<const unsigned> valid_sr_period_slots = mu_to_valid_sr_period_slots_lookup.at(to_numerology_value(scs_common));
+  if (std::find(valid_sr_period_slots.begin(), valid_sr_period_slots.end(), sr_period_slots) ==
+      valid_sr_period_slots.end()) {
+    fmt::print("SR period of {}ms (i.e. {} slots) is not valid for {}kHz SCS.\n",
+               pucch_cfg.sr_period_msec,
+               sr_period_slots,
+               scs_to_khz(scs_common));
+    return false;
   }
 
   if (!pucch_cfg.repetition_sinr_thresholds.empty()) {
@@ -894,7 +958,7 @@ static bool validate_pucch_cell_unit_config(const du_high_unit_base_cell_config&
     // symbols available for PUCCH within a slot.
     const unsigned pucch_f1_nof_symbols = max_nof_pucch_symbols;
     const unsigned nof_occ_codes =
-        pucch_cfg.f1_enable_occ ? format1_symb_to_spreading_factor(pucch_f1_nof_symbols) : 1U;
+        pucch_cfg.f1_enable_occ ? format1_nof_td_occs(pucch_f1_nof_symbols, pucch_cfg.f1_intraslot_freq_hopping) : 1U;
 
     // We define a block as a set of Resources (either F0/F1 or F2) aligned over the same starting PRB.
     const unsigned nof_f1_per_block = nof_occ_codes * pucch_cfg.f1_nof_cyclic_shifts;
@@ -1374,11 +1438,20 @@ static bool validate_ref_beams(const std::vector<du_high_unit_ref_beam_config>& 
     return false;
   }
 
+  const unsigned nof_panels   = get_nof_antenna_panels(topology);
   const unsigned nof_pol      = get_nof_antenna_polarizations(topology);
   const unsigned nof_beams_d1 = get_nof_beams_dim1(topology);
   const unsigned nof_beams_d2 = get_nof_beams_dim2(topology);
 
   for (const auto& beam : beams) {
+    if (beam.i_panel >= nof_panels) {
+      fmt::print("Panel index {} of beam {} is out of range. Antenna topology {} defines {} panels.\n",
+                 beam.i_panel,
+                 beam.ref_beam_id,
+                 to_string(topology),
+                 nof_panels);
+      return false;
+    }
     if (beam.i_pol >= nof_pol) {
       fmt::print("Polarization index {} of beam {} is out of range. Antenna topology {} defines {} polarizations.\n",
                  beam.i_pol,
@@ -1413,11 +1486,13 @@ static bool validate_ref_beams(const std::vector<du_high_unit_ref_beam_config>& 
         fmt::print("Beam identifier {} is configured more than once.\n", beams[i].ref_beam_id);
         return false;
       }
-      if (beams[i].i_pol == beams[j].i_pol and beams[i].i_beam_dim1 == beams[j].i_beam_dim1 and
-          beams[i].i_beam_dim2 == beams[j].i_beam_dim2) {
-        fmt::print("Beams {} and {} select the same beam (polarization {}, first dimension {}, second dimension {}).\n",
+      if (beams[i].i_panel == beams[j].i_panel and beams[i].i_pol == beams[j].i_pol and
+          beams[i].i_beam_dim1 == beams[j].i_beam_dim1 and beams[i].i_beam_dim2 == beams[j].i_beam_dim2) {
+        fmt::print("Beams {} and {} select the same beam (panel {}, polarization {}, first dimension {}, second "
+                   "dimension {}).\n",
                    beams[j].ref_beam_id,
                    beams[i].ref_beam_id,
+                   beams[i].i_panel,
                    beams[i].i_pol,
                    beams[i].i_beam_dim1,
                    beams[i].i_beam_dim2);
@@ -1955,7 +2030,7 @@ static bool validate_base_cell_unit_config(const du_high_unit_base_cell_config& 
   }
   if (config.ntn_cfg) {
     if (is_ntn_band) {
-      if (!validate_ntn_config(*config.ntn_cfg, band)) {
+      if (!validate_ntn_config(config, band)) {
         return false;
       }
     } else {
@@ -1963,6 +2038,13 @@ static bool validate_base_cell_unit_config(const du_high_unit_base_cell_config& 
         return false;
       }
     }
+  }
+  // Values beyond 128ms are only signalled via sr-ProhibitTimer-v1700, which is meant for NTN.
+  if (config.mcg_cfg.sr_cfg.sr_prohibit_timer.value_or(0) > 128 and not is_ntn_band) {
+    fmt::print("mac_cell_group.sr_cfg.sr_prohibit_timer={}ms is only supported in NTN cells. Maximum for TN cells is "
+               "128ms.\n",
+               *config.mcg_cfg.sr_cfg.sr_prohibit_timer);
+    return false;
   }
   if (!validate_pdsch_cell_unit_config(config.pdsch_cfg, nof_crbs, config.nof_antennas_dl, is_ntn_band)) {
     return false;
@@ -1977,7 +2059,7 @@ static bool validate_base_cell_unit_config(const du_high_unit_base_cell_config& 
     return false;
   }
 
-  if (!validate_pucch_cell_unit_config(config, config.common_scs, nof_crbs, config.tdd_ul_dl_cfg, is_ntn_band)) {
+  if (!validate_pucch_cell_unit_config(config, config.common_scs, nof_crbs, config.tdd_ul_dl_cfg)) {
     return false;
   }
 

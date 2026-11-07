@@ -739,7 +739,7 @@ std::vector<odu::du_cell_config> ocudu::generate_du_cell_config(const du_high_un
                                        });
       out_cell.ran.ssb_cfg.ssb_beams.set_beam(
           ssb_beam.ssb_index,
-          get_beam_id(base_cell.tx_ant_topology, 0, beam.i_pol, beam.i_beam_dim1, beam.i_beam_dim2));
+          get_beam_id(base_cell.tx_ant_topology, beam.i_panel, beam.i_pol, beam.i_beam_dim1, beam.i_beam_dim2));
     }
     out_cell.ran.ssb_cfg.ssb_period      = static_cast<ssb_periodicity>(base_cell.ssb_cfg.ssb_period_msec);
     out_cell.ran.ssb_cfg.ssb_block_power = base_cell.ssb_cfg.ssb_block_power;
@@ -1394,6 +1394,8 @@ static scheduler_expert_config generate_scheduler_expert_config(const du_high_un
   out_cfg.ue.dl_mcs                                         = {pdsch.min_ue_mcs, pdsch.max_ue_mcs};
   out_cfg.ue.pdsch_rv_sequence.assign(pdsch.rv_sequence.begin(), pdsch.rv_sequence.end());
   out_cfg.ue.pdsch_cqi_rep_threshold           = pdsch.cqi_rep_threshold;
+  out_cfg.ue.pusch_sinr_rep_threshold          = pusch.sinr_rep_threshold;
+  out_cfg.ue.pusch_force_rep                   = pusch.force_rep;
   out_cfg.ue.dl_harq_la_cqi_drop_threshold     = pdsch.harq_la_cqi_drop_threshold;
   out_cfg.ue.dl_harq_la_ri_drop_threshold      = pdsch.harq_la_ri_drop_threshold;
   out_cfg.ue.max_nof_dl_harq_retxs             = pdsch.max_nof_harq_retxs;

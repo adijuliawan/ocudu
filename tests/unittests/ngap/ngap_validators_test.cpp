@@ -262,6 +262,64 @@ public:
     return pdu_session_res_item;
   }
 
+  /// \brief Set a GBR 5QI on the QoS flow to add or modify of the first PDU session of the given request, without
+  /// the GBR QoS Flow Information IE.
+  [[nodiscard]] bool set_gbr_qos_flow_without_gbr_qos_information(ngap_message& ngap_msg, qos_flow_id_t qos_flow_id)
+  {
+    auto& asn1_request = ngap_msg.pdu.init_msg().value.pdu_session_res_modify_request();
+    auto& asn1_item    = *asn1_request->pdu_session_res_modify_list_mod_req.begin();
+
+    asn1::ngap::pdu_session_res_modify_request_transfer_s asn1_transfer;
+    asn1::cbit_ref                                        bref(asn1_item.pdu_session_res_modify_request_transfer);
+    if (asn1_transfer.unpack(bref) != asn1::OCUDUASN_SUCCESS) {
+      return false;
+    }
+
+    for (auto& asn1_qos_flow : asn1_transfer->qos_flow_add_or_modify_request_list) {
+      if (asn1_qos_flow.qos_flow_id == to_underlying(qos_flow_id)) {
+        // 5QI 2 is a GBR 5QI.
+        asn1_qos_flow.qos_flow_level_qos_params.qos_characteristics.set_non_dyn5qi().five_qi = 2;
+        asn1_qos_flow.qos_flow_level_qos_params.gbr_qos_info_present                         = false;
+      }
+    }
+
+    asn1_item.pdu_session_res_modify_request_transfer = pack_into_pdu(asn1_transfer);
+
+    return true;
+  }
+
+  /// \brief Set a GBR 5QI and the GBR QoS Flow Information IE on the QoS flow to add or modify of the first PDU
+  /// session of the given request.
+  [[nodiscard]] bool set_gbr_qos_flow(ngap_message& ngap_msg, qos_flow_id_t qos_flow_id)
+  {
+    auto& asn1_request = ngap_msg.pdu.init_msg().value.pdu_session_res_modify_request();
+    auto& asn1_item    = *asn1_request->pdu_session_res_modify_list_mod_req.begin();
+
+    asn1::ngap::pdu_session_res_modify_request_transfer_s asn1_transfer;
+    asn1::cbit_ref                                        bref(asn1_item.pdu_session_res_modify_request_transfer);
+    if (asn1_transfer.unpack(bref) != asn1::OCUDUASN_SUCCESS) {
+      return false;
+    }
+
+    for (auto& asn1_qos_flow : asn1_transfer->qos_flow_add_or_modify_request_list) {
+      if (asn1_qos_flow.qos_flow_id != to_underlying(qos_flow_id)) {
+        continue;
+      }
+      // 5QI 2 is a GBR 5QI.
+      asn1_qos_flow.qos_flow_level_qos_params.qos_characteristics.set_non_dyn5qi().five_qi = 2;
+
+      asn1_qos_flow.qos_flow_level_qos_params.gbr_qos_info_present                     = true;
+      asn1_qos_flow.qos_flow_level_qos_params.gbr_qos_info.max_flow_bit_rate_dl        = 10000000;
+      asn1_qos_flow.qos_flow_level_qos_params.gbr_qos_info.max_flow_bit_rate_ul        = 10000000;
+      asn1_qos_flow.qos_flow_level_qos_params.gbr_qos_info.guaranteed_flow_bit_rate_dl = 1000000;
+      asn1_qos_flow.qos_flow_level_qos_params.gbr_qos_info.guaranteed_flow_bit_rate_ul = 1000000;
+    }
+
+    asn1_item.pdu_session_res_modify_request_transfer = pack_into_pdu(asn1_transfer);
+
+    return true;
+  }
+
   ngap_message generate_pdu_session_resource_modify_request_with_one_unique_and_two_duplicate_pdu_sessions(
       amf_ue_id_t      amf_ue_id,
       ran_ue_id_t      ran_ue_id,
@@ -579,6 +637,134 @@ TEST_F(ngap_validator_test, when_delay_critical_qos_flow_has_max_data_burst_volu
   ASSERT_EQ(verification_outcome.request.pdu_session_res_setup_items.size(), 1U);
   ASSERT_EQ(verification_outcome.response.pdu_session_res_failed_to_setup_items.size(), 0U);
   ASSERT_EQ(verification_outcome.response.pdu_session_res_setup_response_items.size(), 0U);
+}
+
+// Test that the GBR QoS Flow Information of a QoS flow to add or modify is converted into the common type.
+TEST_F(ngap_validator_test, when_modify_request_contains_gbr_qos_flow_then_gbr_qos_information_is_converted)
+{
+  pdu_session_id_t psi       = uint_to_pdu_session_id(1);
+  qos_flow_id_t    qfi       = uint_to_qos_flow_id(1);
+  amf_ue_id_t      amf_ue_id = uint_to_amf_ue_id(0);
+  ran_ue_id_t      ran_ue_id = uint_to_ran_ue_id(0);
+
+  ngap_message ngap_msg = generate_valid_pdu_session_resource_modify_request_message(amf_ue_id, ran_ue_id, psi, {qfi});
+  ASSERT_TRUE(set_gbr_qos_flow(ngap_msg, qfi));
+
+  auto& asn1_request = ngap_msg.pdu.init_msg().value.pdu_session_res_modify_request();
+
+  ngap_pdu_session_resource_modify_request request;
+  fill_ngap_pdu_session_resource_modify_request(request, asn1_request->pdu_session_res_modify_list_mod_req);
+
+  const auto& qos_params = request.pdu_session_res_modify_items[psi]
+                               .transfer.qos_flow_add_or_modify_request_list[qfi]
+                               .qos_flow_level_qos_params;
+  ASSERT_TRUE(qos_params.gbr_qos_info.has_value());
+  ASSERT_EQ(qos_params.gbr_qos_info.value().max_br_dl, 10000000);
+  ASSERT_EQ(qos_params.gbr_qos_info.value().max_br_ul, 10000000);
+  ASSERT_EQ(qos_params.gbr_qos_info.value().gbr_dl, 1000000);
+  ASSERT_EQ(qos_params.gbr_qos_info.value().gbr_ul, 1000000);
+}
+
+// Test handling of a GBR QoS flow to add or modify without the GBR QoS Flow Information IE.
+TEST_F(ngap_validator_test, when_gbr_qos_flow_to_modify_has_no_gbr_qos_information_then_pdu_session_modify_fails)
+{
+  pdu_session_id_t psi       = uint_to_pdu_session_id(1);
+  qos_flow_id_t    qfi       = uint_to_qos_flow_id(1);
+  cu_cp_ue_index_t ue_index  = uint_to_ue_index(0);
+  amf_ue_id_t      amf_ue_id = uint_to_amf_ue_id(0);
+  ran_ue_id_t      ran_ue_id = uint_to_ran_ue_id(0);
+
+  ngap_message ngap_msg = generate_valid_pdu_session_resource_modify_request_message(amf_ue_id, ran_ue_id, psi, {qfi});
+  ASSERT_TRUE(set_gbr_qos_flow_without_gbr_qos_information(ngap_msg, qfi));
+
+  auto& asn1_request = ngap_msg.pdu.init_msg().value.pdu_session_res_modify_request();
+
+  ngap_pdu_session_resource_modify_request request;
+  fill_ngap_pdu_session_resource_modify_request(request, asn1_request->pdu_session_res_modify_list_mod_req);
+
+  ngap_ue_logger ue_logger{"NGAP", {ue_index, ran_ue_id}};
+  // Verify PDU session resource modify request.
+  auto verification_outcome = verify_pdu_session_resource_modify_request(request, asn1_request, ue_logger);
+
+  // The only QoS flow of the PDU session fails, so the whole PDU session fails.
+  ASSERT_TRUE(verification_outcome.request.pdu_session_res_modify_items.empty());
+  ASSERT_EQ(verification_outcome.response.pdu_session_res_failed_to_modify_list.size(), 1U);
+}
+
+// Test handling of a PDU session with both a valid QoS flow and a GBR QoS flow without the GBR QoS Flow Information IE.
+TEST_F(ngap_validator_test, when_one_of_two_qos_flows_to_modify_has_incomplete_qos_parameters_then_only_it_fails)
+{
+  pdu_session_id_t psi         = uint_to_pdu_session_id(1);
+  qos_flow_id_t    valid_qfi   = uint_to_qos_flow_id(1);
+  qos_flow_id_t    invalid_qfi = uint_to_qos_flow_id(2);
+  cu_cp_ue_index_t ue_index    = uint_to_ue_index(0);
+  amf_ue_id_t      amf_ue_id   = uint_to_amf_ue_id(0);
+  ran_ue_id_t      ran_ue_id   = uint_to_ran_ue_id(0);
+
+  ngap_message ngap_msg =
+      generate_valid_pdu_session_resource_modify_request_message(amf_ue_id, ran_ue_id, psi, {valid_qfi, invalid_qfi});
+  ASSERT_TRUE(set_gbr_qos_flow_without_gbr_qos_information(ngap_msg, invalid_qfi));
+
+  auto& asn1_request = ngap_msg.pdu.init_msg().value.pdu_session_res_modify_request();
+
+  ngap_pdu_session_resource_modify_request request;
+  fill_ngap_pdu_session_resource_modify_request(request, asn1_request->pdu_session_res_modify_list_mod_req);
+
+  ngap_ue_logger ue_logger{"NGAP", {ue_index, ran_ue_id}};
+  // Verify PDU session resource modify request.
+  auto verification_outcome = verify_pdu_session_resource_modify_request(request, asn1_request, ue_logger);
+
+  // The PDU session is modified without the QoS flow that failed the verification.
+  ASSERT_EQ(verification_outcome.response.pdu_session_res_failed_to_modify_list.size(), 0U);
+  ASSERT_EQ(verification_outcome.request.pdu_session_res_modify_items.size(), 1U);
+  const auto& verified_qos_flows =
+      verification_outcome.request.pdu_session_res_modify_items[psi].transfer.qos_flow_add_or_modify_request_list;
+  ASSERT_EQ(verified_qos_flows.size(), 1U);
+  ASSERT_TRUE(verified_qos_flows.contains(valid_qfi));
+
+  // The QoS flow that failed the verification is reported in the response.
+  ASSERT_EQ(verification_outcome.response.pdu_session_res_modify_list.size(), 1U);
+  const auto& failed_qos_flows =
+      verification_outcome.response.pdu_session_res_modify_list[psi].transfer.qos_flow_failed_to_add_or_modify_list;
+  ASSERT_EQ(failed_qos_flows.size(), 1U);
+  ASSERT_EQ(failed_qos_flows[invalid_qfi].qos_flow_id, invalid_qfi);
+}
+
+// Test handling of a QoS flow that a modify request adds or modifies and releases at the same time.
+TEST_F(ngap_validator_test, when_qos_flow_is_modified_and_released_in_the_same_request_then_it_fails)
+{
+  pdu_session_id_t psi          = uint_to_pdu_session_id(1);
+  qos_flow_id_t    valid_qfi    = uint_to_qos_flow_id(1);
+  qos_flow_id_t    conflict_qfi = uint_to_qos_flow_id(2);
+  cu_cp_ue_index_t ue_index     = uint_to_ue_index(0);
+  amf_ue_id_t      amf_ue_id    = uint_to_amf_ue_id(0);
+  ran_ue_id_t      ran_ue_id    = uint_to_ran_ue_id(0);
+
+  ngap_message ngap_msg = generate_valid_pdu_session_resource_modify_request_message(
+      amf_ue_id, ran_ue_id, psi, {valid_qfi, conflict_qfi}, {conflict_qfi});
+
+  auto& asn1_request = ngap_msg.pdu.init_msg().value.pdu_session_res_modify_request();
+
+  ngap_pdu_session_resource_modify_request request;
+  fill_ngap_pdu_session_resource_modify_request(request, asn1_request->pdu_session_res_modify_list_mod_req);
+
+  ngap_ue_logger ue_logger{"NGAP", {ue_index, ran_ue_id}};
+  // Verify PDU session resource modify request.
+  auto verification_outcome = verify_pdu_session_resource_modify_request(request, asn1_request, ue_logger);
+
+  // The PDU session is modified without the QoS flow, and the QoS flow is not released.
+  ASSERT_EQ(verification_outcome.response.pdu_session_res_failed_to_modify_list.size(), 0U);
+  ASSERT_EQ(verification_outcome.request.pdu_session_res_modify_items.size(), 1U);
+  const auto& transfer = verification_outcome.request.pdu_session_res_modify_items[psi].transfer;
+  ASSERT_EQ(transfer.qos_flow_add_or_modify_request_list.size(), 1U);
+  ASSERT_TRUE(transfer.qos_flow_add_or_modify_request_list.contains(valid_qfi));
+  ASSERT_TRUE(transfer.qos_flow_to_release_list.empty());
+
+  // The QoS flow is reported as failed to add or modify.
+  const auto& failed_qos_flows =
+      verification_outcome.response.pdu_session_res_modify_list[psi].transfer.qos_flow_failed_to_add_or_modify_list;
+  ASSERT_EQ(failed_qos_flows.size(), 1U);
+  ASSERT_EQ(failed_qos_flows[conflict_qfi].qos_flow_id, conflict_qfi);
 }
 
 // Test handling of valid PDU session resource modification request.
