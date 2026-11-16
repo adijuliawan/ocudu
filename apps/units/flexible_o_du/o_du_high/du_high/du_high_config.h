@@ -1332,6 +1332,16 @@ struct du_high_unit_rlm_config {
   rlm_resource_type resource_type = rlm_resource_type::default_type;
 };
 
+/// \brief SNPN broadcast by a cell beside its PLMNs (TS 38.331, SIB1 \c npn-IdentityInfoList).
+struct du_high_unit_snpn_config {
+  /// PLMN ID of the SNPN (MCC and MNC, without filler digit).
+  std::string plmn = "00101";
+  /// NID of the SNPN, 11 hexadecimal digits (TS 23.003, clause 12.7).
+  std::string nid;
+  /// TAC the cell broadcasts for the SNPN.
+  tac_t tac = 0;
+};
+
 /// Slice configuration for a cell.
 struct du_high_unit_cell_slice_config {
   /// Slice/Service Type.
@@ -1369,6 +1379,8 @@ struct du_high_unit_base_cell_config {
   std::string plmn = "00101";
   /// List of human readable PLMNs (without possible filler digit) that are additionally supported by the cell.
   std::vector<std::string> additional_plmns;
+  /// SNPNs broadcast by the cell beside its PLMNs, in \c npn-IdentityInfoList (TS 38.331, SIB1).
+  std::vector<du_high_unit_snpn_config> snpn_list;
   /// TAC.
   tac_t tac = 7;
   /// Additional TACs broadcast alongside \c tac in \c trackingAreaList, TS 38.331. NTN cells only; at most

@@ -32,6 +32,10 @@ struct du_cell_configuration {
   ///
   /// Read back from the gNB-DU's SIB1, so it matches what the cell broadcasts, in broadcast order.
   tac_list_t tac_list;
+  /// \brief TACs the cell broadcasts for its SNPNs in \c npn-IdentityInfoList, TS 38.331. Empty for a PLMN-only cell.
+  ///
+  /// Read back from the gNB-DU's SIB1. The cell belongs to these tracking areas too, so it is paged for them.
+  tac_list_t snpn_tac_list;
   /// Physical cell ID
   pci_t pci;
   /// PLMN identitys served by the cell.

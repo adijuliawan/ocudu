@@ -144,6 +144,30 @@ extract_broadcast_tac_list(const nr_cell_global_id_t& cgi, const byte_buffer& pa
   return tac_list;
 }
 
+/// Reads the TACs the gNB-DU's SIB1 broadcasts for SNPNs in npn-IdentityInfoList, TS 38.331, each TAC once.
+static tac_list_t extract_snpn_tac_list(const nr_cell_global_id_t& cgi, const byte_buffer& packed_sib1)
+{
+  tac_list_t tac_list;
+
+  asn1::cbit_ref       bref{packed_sib1};
+  asn1::rrc_nr::sib1_s sib1;
+  if (sib1.unpack(bref) != asn1::OCUDUASN_SUCCESS) {
+    ocudulog::fetch_basic_logger("CU-CP").warning(
+        "nci={}: Failed to unpack the SIB1 of the served cell. Assuming the cell broadcasts no SNPN", cgi.nci);
+    return tac_list;
+  }
+  if (not sib1.cell_access_related_info.npn_id_info_list_r16.is_present()) {
+    return tac_list;
+  }
+  for (const auto& npn_info : *sib1.cell_access_related_info.npn_id_info_list_r16) {
+    const tac_t tac = npn_info.tac_r16.to_number();
+    if (std::find(tac_list.begin(), tac_list.end(), tac) == tac_list.end()) {
+      tac_list.push_back(tac);
+    }
+  }
+  return tac_list;
+}
+
 du_cell_configuration
 du_configuration_manager::create_du_cell_config(du_cell_index_t                   cell_idx,
                                                 const cu_cp_du_served_cells_item& f1ap_cell_cfg) const
@@ -174,6 +198,7 @@ du_configuration_manager::create_du_cell_config(du_cell_index_t                 
   cell.sys_info.packed_mib  = f1ap_cell_cfg.gnb_du_sys_info->mib_msg.copy();
   cell.sys_info.packed_sib1 = f1ap_cell_cfg.gnb_du_sys_info->sib1_msg.copy();
   cell.tac_list             = extract_broadcast_tac_list(cell.cgi, cell.sys_info.packed_sib1, cell.tac);
+  cell.snpn_tac_list        = extract_snpn_tac_list(cell.cgi, cell.sys_info.packed_sib1);
   cell.location_mapping     = get_location_mapping(cell);
   return cell;
 }

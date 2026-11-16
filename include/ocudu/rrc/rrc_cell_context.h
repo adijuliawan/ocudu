@@ -9,8 +9,10 @@
 #include "ocudu/ran/nr_cgi.h"
 #include "ocudu/ran/ntn_location_mapping.h"
 #include "ocudu/ran/pci.h"
+#include "ocudu/ran/snpn_identity.h"
 #include "ocudu/ran/tac.h"
 #include <cstdint>
+#include <optional>
 
 namespace ocudu {
 
@@ -46,6 +48,8 @@ struct rrc_cell_context {
   std::vector<nr_band>       bands;     ///< Required for capability band filter.
   rrc_timers_t               timers;
   std::vector<plmn_identity> plmn_identity_list; ///< PLMN identities broadcasted in SIB1.
+  /// NPNs broadcasted in SIB1 npn-IdentityInfoList, in NPN index order; empty entry for an unsupported PNI-NPN.
+  std::vector<std::optional<snpn_broadcast_info>> npn_list;
   /// Coarse UE location to TAC mapping of this cell, TS 38.413. Empty unless configured.
   ntn_location_mapping location_mapping;
 };

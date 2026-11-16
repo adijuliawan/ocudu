@@ -28,7 +28,10 @@ static YAML::Node build_cu_cp_plmn_list_section(const cu_cp_unit_plmn_item& conf
 {
   YAML::Node node;
 
-  node["plmn"]        = config.plmn_id;
+  node["plmn"] = config.plmn_id;
+  if (not config.nid.empty()) {
+    node["nid"] = config.nid;
+  }
   auto tai_slice_node = node["tai_slice_support_list"];
   for (const auto& slice : config.tai_slice_support_list) {
     tai_slice_node.push_back(build_cu_cp_tai_slice_section(slice));

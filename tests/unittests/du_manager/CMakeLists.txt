@@ -114,3 +114,8 @@ add_executable(asn1_sib1_tac_list_test asn1_sib1_tac_list_test.cpp)
 target_include_directories(asn1_sib1_tac_list_test PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(asn1_sib1_tac_list_test du_manager_converters ocudu_du_manager ocudu_support ocudulog gtest gtest_main)
 gtest_discover_tests(asn1_sib1_tac_list_test)
+
+add_executable(asn1_sib1_snpn_test asn1_sib1_snpn_test.cpp)
+target_include_directories(asn1_sib1_snpn_test PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(asn1_sib1_snpn_test du_manager_converters ocudu_du_manager ocudu_support ocudulog gtest gtest_main)
+gtest_discover_tests(asn1_sib1_snpn_test)

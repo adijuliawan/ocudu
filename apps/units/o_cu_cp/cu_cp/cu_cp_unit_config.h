@@ -43,6 +43,9 @@ struct cu_cp_unit_plmn_item {
   std::string plmn_id;
   /// Supported Slices by the RAN node.
   std::vector<tai_slice_t> tai_slice_support_list;
+  /// NID of an SNPN, 11 hexadecimal digits (TS 23.003, clause 12.7). Empty for a PLMN. With a NID the item names the
+  /// SNPN of this PLMN ID and NID, sent to the AMF with NPN Support (TS 38.413, sec. 9.3.1.214).
+  std::string nid;
 };
 
 struct cu_cp_unit_supported_ta_item {

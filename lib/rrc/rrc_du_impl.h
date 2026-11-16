@@ -6,6 +6,7 @@
 
 #include "metrics/rrc_du_metrics_aggregator.h"
 #include "ue/rrc_ue_impl.h"
+#include "ocudu/asn1/rrc_nr/sys_info.h"
 #include "ocudu/rrc/rrc_config.h"
 #include "ocudu/rrc/rrc_du.h"
 #include <unordered_map>
@@ -136,6 +137,10 @@ public:
   rrc_du_metrics_collector&        get_rrc_du_metrics_collector() override { return metrics_aggregator; }
 
 private:
+  /// Reads the NPNs of SIB1 npn-IdentityInfoList, in NPN index order (TS 38.331, 6.3.2).
+  std::vector<std::optional<snpn_broadcast_info>> extract_npn_list(const asn1::rrc_nr::sib1_s& sib1,
+                                                                   nr_cell_identity            nci) const;
+
   // Helpers.
   const rrc_cfg_t cfg;
 

@@ -790,6 +790,13 @@ static YAML::Node build_cell_entry(const du_high_unit_base_cell_config& config)
   if (!config.additional_plmns.empty()) {
     node["additional_plmns"] = config.additional_plmns;
   }
+  for (const auto& snpn : config.snpn_list) {
+    YAML::Node snpn_node;
+    snpn_node["plmn"] = snpn.plmn;
+    snpn_node["nid"]  = snpn.nid;
+    snpn_node["tac"]  = snpn.tac;
+    node["snpn_list"].push_back(snpn_node);
+  }
   node["tac"] = config.tac;
   if (!config.additional_tacs.empty()) {
     YAML::Node additional_tacs_node(YAML::NodeType::Sequence);

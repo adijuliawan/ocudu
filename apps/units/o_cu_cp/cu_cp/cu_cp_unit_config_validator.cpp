@@ -643,15 +643,17 @@ static bool validate_amf_appconfig(const cu_cp_unit_amf_config&                 
     // check supported tracking areas
     if (config.supported_tas.size() > 1) {
       for (unsigned outer_ta_idx = 0; outer_ta_idx < config.supported_tas.size(); outer_ta_idx++) {
+        // A PLMN and an SNPN of the same PLMN ID are different networks, so the NID is part of the key.
         std::vector<std::string> outer_plmns;
         for (const auto& plmn_item : config.supported_tas[outer_ta_idx].plmn_list) {
-          outer_plmns.push_back(plmn_item.plmn_id);
+          outer_plmns.push_back(plmn_item.plmn_id + "-" + plmn_item.nid);
         }
 
         for (unsigned inner_ta_idx = outer_ta_idx + 1; inner_ta_idx < config.supported_tas.size(); inner_ta_idx++) {
           if (config.supported_tas[outer_ta_idx].tac == config.supported_tas[inner_ta_idx].tac) {
             for (const auto& plmn_item : config.supported_tas[inner_ta_idx].plmn_list) {
-              if (std::find(outer_plmns.begin(), outer_plmns.end(), plmn_item.plmn_id) != outer_plmns.end()) {
+              if (std::find(outer_plmns.begin(), outer_plmns.end(), plmn_item.plmn_id + "-" + plmn_item.nid) !=
+                  outer_plmns.end()) {
                 fmt::print("Supported tracking areas of a AMF must be unique\n");
                 return false;
               }

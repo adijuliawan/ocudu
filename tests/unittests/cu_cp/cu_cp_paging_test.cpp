@@ -12,6 +12,7 @@
 #include "ocudu/adt/format.h"
 #include "ocudu/asn1/f1ap/f1ap_pdu_contents.h"
 #include "ocudu/asn1/ngap/ngap_pdu_contents.h"
+#include "ocudu/asn1/rrc_nr/sys_info.h"
 #include "ocudu/f1ap/f1ap_message.h"
 #include "ocudu/ngap/ngap_message.h"
 #include <gtest/gtest.h>
@@ -217,6 +218,65 @@ TEST_F(cu_cp_paging_test, when_paged_tac_is_a_secondary_broadcast_tac_then_pagin
 
   ASSERT_TRUE(this->wait_for_f1ap_tx_pdu(du_idx, f1ap_pdu)) << "F1AP Paging should have been sent to the DU";
   ASSERT_TRUE(test_helpers::is_valid_paging(f1ap_pdu));
+}
+
+/// SIB1 hex string of a shared cell: the test PLMN on its TAC, plus SNPN 00101 + NID 000007ed9d5 on \c snpn_tac.
+static std::string create_snpn_sib1_hex_string(tac_t snpn_tac)
+{
+  byte_buffer          packed = test_helpers::create_packed_sib1(plmn_identity::test_value());
+  asn1::rrc_nr::sib1_s sib1;
+  {
+    asn1::cbit_ref bref{packed};
+    report_fatal_error_if_not(sib1.unpack(bref) == asn1::OCUDUASN_SUCCESS, "Failed to unpack test SIB1");
+  }
+  asn1::rrc_nr::npn_id_info_r16_s npn_info;
+  asn1::rrc_nr::npn_id_r16_c      npn_id;
+  auto&                           snpn = npn_id.set_snpn_r16();
+  snpn.plmn_id_r16                     = sib1.cell_access_related_info.plmn_id_info_list[0].plmn_id_list[0];
+  asn1::fixed_bitstring<44> nid;
+  nid.from_number(0x000007ed9d5U);
+  snpn.nid_list_r16.push_back(nid);
+  npn_info.npn_id_list_r16.push_back(npn_id);
+  npn_info.tac_r16.from_number(snpn_tac);
+  npn_info.cell_id_r16 = sib1.cell_access_related_info.plmn_id_info_list[0].cell_id;
+  npn_info.cell_reserved_for_oper_r16.value =
+      asn1::rrc_nr::npn_id_info_r16_s::cell_reserved_for_oper_r16_opts::not_reserved;
+  sib1.cell_access_related_info.ext = true;
+  sib1.cell_access_related_info.npn_id_info_list_r16.set_present();
+  sib1.cell_access_related_info.npn_id_info_list_r16->push_back(npn_info);
+
+  byte_buffer out;
+  asn1::bit_ref bref{out};
+  report_fatal_error_if_not(sib1.pack(bref) == asn1::OCUDUASN_SUCCESS, "Failed to pack test SIB1");
+  return asn1::octet_string_helper::to_hex_string(out);
+}
+
+TEST_F(cu_cp_paging_test, when_paged_tac_is_broadcast_for_an_snpn_then_paging_is_sent_to_du)
+{
+  // A shared cell broadcasts the PLMN on TAC 7 and the SNPN on TAC 3, TS 38.331 SIB1. An SNPN UE is paged on TAC 3.
+  unsigned du_idx = setup_du(test_helpers::generate_f1_setup_request(
+      int_to_gnb_du_id(0x11),
+      {test_helpers::served_cell_item_info{.tac = 7, .sib1_str = create_snpn_sib1_hex_string(3)}}));
+
+  ngap_message paging_msg = generate_valid_minimal_paging_message();
+  paging_msg.pdu.init_msg().value.paging()->tai_list_for_paging[0].tai.tac.from_number(3);
+  ASSERT_TRUE(send_ngap_paging(du_idx, paging_msg));
+
+  ASSERT_TRUE(this->wait_for_f1ap_tx_pdu(du_idx, f1ap_pdu)) << "F1AP Paging should have been sent to the DU";
+  ASSERT_TRUE(test_helpers::is_valid_paging(f1ap_pdu));
+}
+
+TEST_F(cu_cp_paging_test, when_paged_tac_is_neither_the_plmn_nor_an_snpn_tac_then_paging_is_not_sent_to_du)
+{
+  unsigned du_idx = setup_du(test_helpers::generate_f1_setup_request(
+      int_to_gnb_du_id(0x11),
+      {test_helpers::served_cell_item_info{.tac = 7, .sib1_str = create_snpn_sib1_hex_string(3)}}));
+
+  ngap_message paging_msg = generate_valid_minimal_paging_message();
+  paging_msg.pdu.init_msg().value.paging()->tai_list_for_paging[0].tai.tac.from_number(4);
+  ASSERT_TRUE(send_ngap_paging(du_idx, paging_msg));
+
+  ASSERT_FALSE(this->get_du(du_idx).try_pop_dl_pdu(f1ap_pdu));
 }
 
 TEST_F(cu_cp_paging_test, when_paged_tac_is_outside_the_broadcast_tac_list_then_paging_is_not_sent_to_du)

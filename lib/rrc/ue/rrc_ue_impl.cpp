@@ -174,6 +174,8 @@ void rrc_ue_impl::request_coarse_ue_location()
 
 void rrc_ue_impl::fill_ue_derived_location(cu_cp_user_location_info_nr& user_location_info) const
 {
+  apply_selected_snpn(context, user_location_info);
+
   const std::optional<tac_t>            derived_tac = get_ue_location_derived_tac();
   const std::optional<nr_cell_identity> mapped_nci  = get_ue_mapped_cell_id();
 

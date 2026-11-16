@@ -76,6 +76,13 @@ inline void fill_asn1_ng_setup_request(asn1::ngap::ng_setup_request_s& asn1_requ
       // Fill PLMN id.
       asn1_broadcast_plmn_item.plmn_id = plmn_item.plmn_id.to_bytes();
 
+      // An item with NPN Support names the SNPN of this PLMN ID and NID, TS 38.413 sec. 8.7.1.2 and 9.3.1.214.
+      if (plmn_item.nid.has_value()) {
+        asn1_broadcast_plmn_item.ie_exts_present             = true;
+        asn1_broadcast_plmn_item.ie_exts.npn_support_present = true;
+        asn1_broadcast_plmn_item.ie_exts.npn_support.set_sn_pn().from_number(plmn_item.nid->value());
+      }
+
       // Fill TAI slice support list.
       for (const auto& slice_support_item : plmn_item.slice_support_list) {
         // Fill s_nssai.

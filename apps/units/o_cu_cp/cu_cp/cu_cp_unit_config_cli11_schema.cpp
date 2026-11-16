@@ -11,6 +11,7 @@
 #include "cu_cp_unit_config.h"
 #include "cu_cp_unit_config_helpers.h"
 #include "ocudu/ran/nr_cell_identity.h"
+#include "ocudu/ran/snpn_identity.h"
 #include "ocudu/support/cli11_utils.h"
 #include "ocudu/support/config_parsers.h"
 #include <algorithm>
@@ -80,6 +81,10 @@ static void configure_cli11_plmn_item_args(CLI::App& app, cu_cp_unit_plmn_item& 
       ->pattern("^[0-9]{5,6}$")
       ->min_length(5)
       ->max_length(6);
+  add_option(app, "--nid", config.nid, "NID of an SNPN of this PLMN ID, 11 hexadecimal digits")
+      ->check([](const std::string& value) {
+        return network_identifier::parse(value).has_value() ? "" : "Invalid NID: expected 11 hexadecimal digits";
+      });
 
   // TAI slice support list.
   add_option_object_list<cu_cp_unit_plmn_item::tai_slice_t>(app,

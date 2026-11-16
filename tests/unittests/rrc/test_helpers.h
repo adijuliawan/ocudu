@@ -34,6 +34,7 @@ public:
   {
     logger.info("Received Initial UE Message");
     initial_ue_msg_received = true;
+    last_init_ue_uli        = msg.user_location_info;
   }
 
   bool on_ul_nas_transport_message(const cu_cp_ul_nas_transport& msg) override
@@ -43,6 +44,8 @@ public:
   }
 
   bool initial_ue_msg_received = false;
+  /// User Location Information of the last Initial UE Message.
+  std::optional<cu_cp_user_location_info_nr> last_init_ue_uli;
 
 private:
   bool                    ue_context_release_outcome = false;

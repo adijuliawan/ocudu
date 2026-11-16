@@ -39,6 +39,13 @@ static bool is_tac_in_list(span<const cu_cp_tai_list_for_paging_item> tai_list, 
 /// A cell belongs to every tracking area it broadcasts; matching only the first drops paging for the others.
 static bool is_cell_in_tai_list(span<const cu_cp_tai_list_for_paging_item> tai_list, const du_cell_configuration& cell)
 {
+  // A cell that broadcasts SNPNs also belongs to the tracking areas it broadcasts for them, TS 38.331 SIB1.
+  if (std::any_of(cell.snpn_tac_list.begin(), cell.snpn_tac_list.end(), [&tai_list](tac_t tac) {
+        return is_tac_in_list(tai_list, tac);
+      })) {
+    return true;
+  }
+
   if (cell.tac_list.empty()) {
     return is_tac_in_list(tai_list, cell.tac);
   }

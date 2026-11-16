@@ -256,6 +256,14 @@ cu_cp_user_location_info_to_asn1(const cu_cp_user_location_info_nr& cu_cp_user_l
     }
   }
 
+  // NID of the SNPN serving the UE, TS 38.413 sec. 9.3.1.16: with the PLMN Identity of the TAI it names the SNPN, from
+  // which the AMF tells the UE's network.
+  if (cu_cp_user_location_info.nid.has_value()) {
+    asn1_user_location_info.ie_exts_present      = true;
+    asn1_user_location_info.ie_exts.n_id_present = true;
+    asn1_user_location_info.ie_exts.n_id.from_number(cu_cp_user_location_info.nid->value());
+  }
+
   return asn1_user_location_info;
 }
 

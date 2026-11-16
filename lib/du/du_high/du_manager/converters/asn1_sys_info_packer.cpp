@@ -357,6 +357,28 @@ static asn1::rrc_nr::plmn_id_info_s make_asn1_plmn_id_info(const plmn_identity& 
   return asn1_plmn_info;
 }
 
+/// \brief One SNPN entry of \c npn-IdentityInfoList, TS 38.331, SIB1: the SNPN's PLMN with its NID, the TAC the cell
+/// broadcasts for it and the cell identity.
+static asn1::rrc_nr::npn_id_info_r16_s make_asn1_snpn_id_info(const snpn_broadcast_info& snpn,
+                                                              const nr_cell_identity&    nci)
+{
+  using namespace asn1::rrc_nr;
+
+  npn_id_info_r16_s asn1_npn_info;
+  npn_id_r16_c      asn1_npn_id;
+  auto&             asn1_snpn = asn1_npn_id.set_snpn_r16();
+  // TS 38.331: the MCC is present in the PLMN of an NPN entry; Qualcomm modems refuse an NPN PLMN without it.
+  asn1_snpn.plmn_id_r16 = make_asn1_plmn_id(snpn.snpn.plmn);
+  asn1::fixed_bitstring<44> asn1_nid;
+  asn1_nid.from_number(snpn.snpn.nid.value());
+  asn1_snpn.nid_list_r16.push_back(asn1_nid);
+  asn1_npn_info.npn_id_list_r16.push_back(asn1_npn_id);
+  asn1_npn_info.tac_r16.from_number(snpn.tac);
+  asn1_npn_info.cell_id_r16.from_number(nci.value());
+  asn1_npn_info.cell_reserved_for_oper_r16.value = npn_id_info_r16_s::cell_reserved_for_oper_r16_opts::not_reserved;
+  return asn1_npn_info;
+}
+
 /// Whether an SI message only carries a warning, and is therefore no part of the normal operation.
 static bool carries_warning(const si_message_sched_info& si_msg)
 {
@@ -389,6 +411,14 @@ static asn1::rrc_nr::sib1_s make_asn1_rrc_cell_sib1(const du_cell_config& du_cfg
       make_asn1_plmn_id_info(du_cfg.nr_cgi.plmn_id, du_cfg.tac, du_cfg.tac_list, du_cfg.nr_cgi.nci));
   for (auto& add_plmn : du_cfg.si.cell_acc_rel_info.additional_plmns) {
     asn1_plmn_id_info_list[0].plmn_id_list.push_back(make_asn1_plmn_id(add_plmn));
+  }
+  if (not du_cfg.si.cell_acc_rel_info.snpn_list.empty()) {
+    // npn-IdentityInfoList sits in the first extension group of CellAccessRelatedInfo, TS 38.331.
+    sib1.cell_access_related_info.ext = true;
+    sib1.cell_access_related_info.npn_id_info_list_r16.set_present();
+    for (const snpn_broadcast_info& snpn : du_cfg.si.cell_acc_rel_info.snpn_list) {
+      sib1.cell_access_related_info.npn_id_info_list_r16->push_back(make_asn1_snpn_id_info(snpn, du_cfg.nr_cgi.nci));
+    }
   }
 
   sib1.conn_est_fail_ctrl_present                   = true;

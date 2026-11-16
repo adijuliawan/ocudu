@@ -17,6 +17,7 @@
 #include "ocudu/ran/pucch/pucch_mapping.h"
 #include "ocudu/ran/pusch/pusch_constants.h"
 #include "ocudu/ran/rb_id.h"
+#include "ocudu/ran/snpn_identity.h"
 #include "ocudu/ran/ssb/ssb_mapping.h"
 #include "ocudu/ran/transform_precoding/transform_precoding_helpers.h"
 #include "ocudu/rlc/rlc_config.h"
@@ -1910,6 +1911,40 @@ static bool validate_cell_cg_config(const du_high_configured_grants& cg_cfg, uns
   return true;
 }
 
+/// Validates the SNPNs broadcast by a cell in npn-IdentityInfoList, TS 38.331.
+static bool validate_snpn_list(const du_high_unit_base_cell_config& config)
+{
+  // TS 38.331: npn-IdentityInfoList holds 1 to maxNPN (12) entries.
+  static constexpr unsigned max_nof_npn = 12;
+  if (config.snpn_list.size() > max_nof_npn) {
+    fmt::print("A cell can broadcast at most {} SNPNs, but {} are configured.\n", max_nof_npn, config.snpn_list.size());
+    return false;
+  }
+  for (unsigned i = 0, e = config.snpn_list.size(); i != e; ++i) {
+    const auto& snpn = config.snpn_list[i];
+    if (!plmn_identity::parse(snpn.plmn).has_value()) {
+      fmt::print("Invalid PLMN '{}' in SNPN entry {}.\n", snpn.plmn, i);
+      return false;
+    }
+    if (!network_identifier::parse(snpn.nid).has_value()) {
+      fmt::print("Invalid NID '{}' in SNPN entry {}: expected 11 hexadecimal digits.\n", snpn.nid, i);
+      return false;
+    }
+    if (!is_valid(snpn.tac)) {
+      fmt::print("Invalid TAC '{}' in SNPN entry {}.\n", snpn.tac, i);
+      return false;
+    }
+    for (unsigned j = 0; j != i; ++j) {
+      if (config.snpn_list[j].plmn == snpn.plmn and
+          network_identifier::parse(config.snpn_list[j].nid)->value() == network_identifier::parse(snpn.nid)->value()) {
+        fmt::print("SNPN {}-{} is configured more than once.\n", snpn.plmn, snpn.nid);
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 /// Validates the additional TACs broadcast by a cell in trackingAreaList, TS 38.331.
 static bool validate_additional_tacs(const du_high_unit_base_cell_config& config, bool is_ntn_band)
 {
@@ -2025,6 +2060,10 @@ static bool validate_base_cell_unit_config(const du_high_unit_base_cell_config& 
       band_helper::get_n_rbs_from_bw(config.channel_bw_mhz, config.common_scs, band_helper::get_freq_range(band));
 
   const bool is_ntn_band = band_helper::is_ntn_band(band);
+  if (!validate_snpn_list(config)) {
+    return false;
+  }
+
   if (!validate_additional_tacs(config, is_ntn_band)) {
     return false;
   }

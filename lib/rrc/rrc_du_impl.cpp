@@ -144,10 +144,57 @@ rrc_du_impl::get_cell_info(const std::vector<cu_cp_du_served_cells_item>& served
       continue;
     }
 
+    cell_info.npn_list = extract_npn_list(sib1_msg, nci);
+
     cell_info_map.emplace(served_cell.served_cell_info.nr_cgi, cell_info);
   }
 
   return cell_info_map;
+}
+
+std::vector<std::optional<snpn_broadcast_info>> rrc_du_impl::extract_npn_list(const asn1::rrc_nr::sib1_s& sib1,
+                                                                             nr_cell_identity            nci) const
+{
+  // TS 38.331, npn-IdentityInfoList: the NPN index is B+c1+...+c(n-1)+i for the i-th NPN of the n-th
+  // NPN-IdentityInfo, where B is the number of PLMN index values of plmn-IdentityInfoList and c(j) the number of NPN
+  // index values of the j-th NPN-IdentityInfo. Each NID of an SNPN entry, and each CAG ID of a PNI-NPN entry, takes
+  // one index value. selectedPLMN-Identity counts on from the PLMN index values in this order.
+  std::vector<std::optional<snpn_broadcast_info>> npn_list;
+  if (not sib1.cell_access_related_info.npn_id_info_list_r16.is_present()) {
+    return npn_list;
+  }
+  for (const auto& npn_info : *sib1.cell_access_related_info.npn_id_info_list_r16) {
+    const tac_t tac = npn_info.tac_r16.to_number();
+    for (const auto& npn_id : npn_info.npn_id_list_r16) {
+      if (npn_id.type().value == asn1::rrc_nr::npn_id_r16_c::types_opts::pni_npn_r16) {
+        logger.warning("nci={}: SIB1 broadcasts a PNI-NPN (CAG), which is not supported", nci);
+        for (unsigned i = 0, e = std::max<size_t>(npn_id.pni_npn_r16().cag_id_list_r16.size(), 1); i != e; ++i) {
+          npn_list.emplace_back(std::nullopt);
+        }
+        continue;
+      }
+      const auto& snpn = npn_id.snpn_r16();
+      std::optional<plmn_identity> plmn;
+      if (snpn.plmn_id_r16.mcc_present) {
+        expected<mobile_country_code> mcc = mobile_country_code::from_bytes(snpn.plmn_id_r16.mcc);
+        expected<mobile_network_code> mnc = mobile_network_code::from_bytes(snpn.plmn_id_r16.mnc);
+        if (mcc.has_value() and mnc.has_value()) {
+          plmn.emplace(mcc.value(), mnc.value());
+        }
+      }
+      for (const auto& asn1_nid : snpn.nid_list_r16) {
+        if (not plmn.has_value()) {
+          logger.warning("nci={}: Ignoring an SNPN of SIB1 without a valid MCC and MNC", nci);
+          npn_list.emplace_back(std::nullopt);
+          continue;
+        }
+        npn_list.emplace_back(
+            snpn_broadcast_info{{*plmn, network_identifier::from_number(asn1_nid.to_number()).value()}, tac});
+        logger.debug("Found SNPN {} with TAC {} in SIB1 RRC container", npn_list.back()->snpn, tac);
+      }
+    }
+  }
+  return npn_list;
 }
 
 std::vector<rrc_plmn_ran_area_cell_t> rrc_du_impl::get_ran_area_cells()
@@ -369,6 +416,7 @@ rrc_ue_interface* rrc_du_impl::add_ue(const rrc_ue_creation_message& msg)
   rrc_cell.ssb_arfcn          = ue_cfg.meas_timings.front().freq_and_timing.value().carrier_freq;
   rrc_cell.timers             = cell_info_db.at(msg.cell.cgi).timers;
   rrc_cell.plmn_identity_list = cell_info_db.at(msg.cell.cgi).plmn_identity_list;
+  rrc_cell.npn_list           = cell_info_db.at(msg.cell.cgi).npn_list;
 
   // Add RRC UE to RRC DU adapter.
   rrc_ue_rrc_du_adapters.emplace(ue_index, rrc_ue_rrc_du_adapter{get_rrc_du_connection_event_handler()});

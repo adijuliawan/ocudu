@@ -13,6 +13,7 @@
 #include "ocudu/ran/gnb_id.h"
 #include "ocudu/ran/nr_cgi.h"
 #include "ocudu/ran/plmn_identity.h"
+#include "ocudu/ran/snpn_identity.h"
 #include "ocudu/ran/tac.h"
 #include "ocudu/ran/tai.h"
 #include "fmt/base.h"
@@ -128,6 +129,8 @@ struct cu_cp_user_location_info_nr {
   nr_cell_global_id_t     nr_cgi;
   tai_t                   tai;
   std::optional<uint64_t> time_stamp;
+  /// NID of the SNPN serving the UE, reported as NID, TS 38.413 sec. 9.3.1.16. Absent for a PLMN UE.
+  std::optional<network_identifier> nid;
   /// TACs broadcast by the serving cell (\c trackingAreaList, TS 38.331), reported as TAC List in NR NTN,
   /// TS 38.413. Empty unless several.
   tac_list_t tac_list;

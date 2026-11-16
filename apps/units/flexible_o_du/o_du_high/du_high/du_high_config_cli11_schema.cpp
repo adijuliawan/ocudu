@@ -14,6 +14,7 @@
 #include "ocudu/ran/csi_report/csi_report_configuration.h"
 #include "ocudu/ran/drx_config.h"
 #include "ocudu/ran/du_types.h"
+#include "ocudu/ran/snpn_identity.h"
 #include "ocudu/ran/duplex_mode.h"
 #include "ocudu/ran/prach/ra_helper.h"
 #include "ocudu/ran/prs/prs_constants.h"
@@ -2395,6 +2396,22 @@ static void configure_cli11_slicing_scheduling_args(CLI::App&                   
   configure_cli11_scheduler_policy_args(*policy_cfg_cmd, slice_sched_params.slice_policy_cfg);
 }
 
+static void configure_cli11_snpn_args(CLI::App& app, du_high_unit_snpn_config& snpn_params)
+{
+  add_option(app, "--plmn", snpn_params.plmn, "PLMN ID of the SNPN")
+      ->capture_default_str()
+      ->check([](const std::string& value) {
+        return plmn_identity::parse(value).has_value() ? "" : "Invalid PLMN format";
+      })
+      ->pattern("^[0-9]{5,6}$");
+  add_option(app, "--nid", snpn_params.nid, "NID of the SNPN, 11 hexadecimal digits")
+      ->check([](const std::string& value) {
+        return network_identifier::parse(value).has_value() ? "" : "Invalid NID: expected 11 hexadecimal digits";
+      })
+      ->required();
+  add_option(app, "--tac", snpn_params.tac, "TAC broadcast for the SNPN")->capture_default_str()->range(0, 0xffffff);
+}
+
 static void configure_cli11_slicing_args(CLI::App& app, du_high_unit_cell_slice_config& slice_params)
 {
   add_option(app, "--sst", slice_params.sst, "Slice Service Type")->capture_default_str()->range(0, 255);
@@ -2730,6 +2747,10 @@ static void configure_cli11_common_cell_args(CLI::App& app, du_high_unit_base_ce
 
   CLI::App* drx_subcmd = add_subcommand(app, "drx", "DRX parameters");
   configure_cli11_drx_args(*drx_subcmd, cell_params.drx_cfg);
+
+  // SNPNs broadcast beside the PLMNs.
+  add_option_object_list<du_high_unit_snpn_config>(
+      app, "--snpn_list", cell_params.snpn_list, configure_cli11_snpn_args, "SNPNs broadcast by the cell");
 
   // Slicing configuration.
   add_option_object_list<du_high_unit_cell_slice_config>(

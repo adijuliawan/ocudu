@@ -10,6 +10,7 @@
 #include "ocudu/adt/format.h"
 #include "ocudu/cu_cp/cu_cp_configuration_helpers.h"
 #include "ocudu/ran/plmn_identity.h"
+#include "ocudu/ran/snpn_identity.h"
 
 using namespace ocudu;
 
@@ -371,6 +372,11 @@ static std::vector<ocucp::supported_tracking_area> get_supported_tas(span<const 
         report_error("Invalid PLMN: {}\n", plmn_item.plmn_id);
       }
       auto& slice = plmn_list.emplace_back(ocucp::plmn_item{plmn.value(), {}});
+      if (not plmn_item.nid.empty()) {
+        expected<network_identifier> nid = network_identifier::parse(plmn_item.nid);
+        report_error_if_not(nid.has_value(), "Invalid NID: {}\n", plmn_item.nid);
+        slice.nid = nid.value();
+      }
       for (const auto& elem : plmn_item.tai_slice_support_list) {
         slice.slice_support_list.push_back(
             s_nssai_t{slice_service_type{elem.sst}, slice_differentiator::create(elem.sd).value()});

@@ -6,6 +6,7 @@
 
 #include "ocudu/ran/plmn_identity.h"
 #include "ocudu/ran/s_nssai.h"
+#include "ocudu/ran/snpn_identity.h"
 #include "ocudu/ran/tac.h"
 #include <optional>
 #include <string_view>
@@ -16,6 +17,9 @@ namespace ocudu::ocucp {
 struct plmn_item {
   plmn_identity          plmn_id;
   std::vector<s_nssai_t> slice_support_list;
+  /// NID of the SNPN this item names together with \c plmn_id, sent as NPN Support, TS 38.413 sec. 9.3.1.214.
+  /// Empty for a PLMN.
+  std::optional<network_identifier> nid;
 };
 
 /// \brief Satellite RAT type of an NTN tracking area, as per TS 23.501, Section 5.4.10.

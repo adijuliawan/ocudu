@@ -8,6 +8,7 @@
 #include "ocudu/ran/cause/common.h"
 #include "ocudu/ran/cu_cp_cell_configuration.h"
 #include "ocudu/ran/plmn_identity.h"
+#include "ocudu/ran/snpn_identity.h"
 #include "ocudu/rrc/rrc_cell_context.h"
 #include "ocudu/rrc/rrc_metrics.h"
 #include "ocudu/rrc/rrc_ue.h"
@@ -24,6 +25,9 @@ struct rrc_cell_info {
   rrc_timers_t                 timers;
   // > PLMN identities broadcasted in SIB1. Max 12 as per TS 38.331 section 6.4.
   std::vector<plmn_identity> plmn_identity_list;
+  // > NPNs broadcasted in SIB1 npn-IdentityInfoList, in NPN index order (TS 38.331, 6.3.2). An entry is empty for a
+  //   PNI-NPN (CAG), which is not supported.
+  std::vector<std::optional<snpn_broadcast_info>> npn_list;
 };
 
 class rrc_du_cell_manager

@@ -10,6 +10,7 @@
 #include "ocudu/ran/sib/cell_reselection.h"
 #include "ocudu/ran/sib/sib_constants.h"
 #include "ocudu/ran/sib/sib_type.h"
+#include "ocudu/ran/snpn_identity.h"
 #include <algorithm>
 #include <variant>
 #include <vector>
@@ -28,6 +29,11 @@ struct cell_selection_info {
 struct cell_access_related_info {
   /// Additional PLMNs that the UE can use to access the cell besides the cell primary PLMN. See TS 38.331, \c SIB1.
   std::vector<plmn_identity> additional_plmns;
+  /// \brief SNPNs broadcast in \c npn-IdentityInfoList, TS 38.331, \c SIB1, each in its own \c NPN-IdentityInfo.
+  ///
+  /// The cell stays a PLMN cell (shared cell): its PLMNs above keep \c cellReservedForOtherUse unset. The NPN index
+  /// of the i-th entry, used by \c selectedPLMN-Identity, is the number of PLMN identities plus i + 1.
+  std::vector<snpn_broadcast_info> snpn_list;
 };
 
 /// Cell reselection information common to all cell reselection types.

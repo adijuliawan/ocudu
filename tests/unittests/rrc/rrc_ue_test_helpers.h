@@ -58,6 +58,10 @@ static security::security_context generate_security_context(ue_security_manager&
 struct rrc_ue_test_cell_params {
   std::vector<nr_band> bands            = {nr_band::n78};
   ntn_location_mapping location_mapping = {};
+  /// TAC of the cell's PLMN entry.
+  tac_t tac = 7;
+  /// NPNs of the cell's SIB1 npn-IdentityInfoList, in NPN index order.
+  std::vector<std::optional<snpn_broadcast_info>> npn_list = {};
 };
 
 /// Helper class to setup RRC UE for testing specific
@@ -111,6 +115,8 @@ protected:
     rrc_ue_create_msg.cell.bands            = cell_params.bands;
     rrc_ue_create_msg.cell.location_mapping = cell_params.location_mapping;
     rrc_ue_create_msg.cell.plmn_identity_list.push_back(plmn_identity::test_value());
+    rrc_ue_create_msg.cell.tac      = cell_params.tac;
+    rrc_ue_create_msg.cell.npn_list = cell_params.npn_list;
     rrc_ue_create_msg.cell.timers.t301 = test_t301;
 
     rrc_ue_cfg_t rrc_ue_cfg;
@@ -296,6 +302,27 @@ protected:
   void receive_setup_complete()
   {
     pdcp_ctx->handle_ul_dcch_pdu(srb_id_t::srb1, byte_buffer::create(rrc_setup_complete_pdu).value());
+  }
+
+  /// Receives the RRC Setup Complete of \c rrc_setup_complete_pdu with another selectedPLMN-Identity.
+  void receive_setup_complete_with_selected_plmn(uint8_t sel_plmn_id)
+  {
+    // The PDU is a PDCP SRB PDU: a 2-byte header, the UL-DCCH message and a 4-byte MAC-I (zero before security).
+    span<const uint8_t> pdu = rrc_setup_complete_pdu;
+    byte_buffer         rrc_msg_buf = byte_buffer::create(pdu.subspan(2, pdu.size() - 6)).value();
+
+    asn1::rrc_nr::ul_dcch_msg_s ul_dcch_msg;
+    asn1::cbit_ref              bref{rrc_msg_buf};
+    ASSERT_EQ(ul_dcch_msg.unpack(bref), asn1::OCUDUASN_SUCCESS);
+    ul_dcch_msg.msg.c1().rrc_setup_complete().crit_exts.rrc_setup_complete().sel_plmn_id = sel_plmn_id;
+
+    byte_buffer    packed;
+    asn1::bit_ref  wbref{packed};
+    ASSERT_EQ(ul_dcch_msg.pack(wbref), asn1::OCUDUASN_SUCCESS);
+    byte_buffer pdcp_pdu = byte_buffer::create({0x00, 0x00}).value();
+    ASSERT_TRUE(pdcp_pdu.append(packed));
+    ASSERT_TRUE(pdcp_pdu.append({0x00, 0x00, 0x00, 0x00}));
+    pdcp_ctx->handle_ul_dcch_pdu(srb_id_t::srb1, std::move(pdcp_pdu));
   }
 
   void receive_corrupted_setup_complete()

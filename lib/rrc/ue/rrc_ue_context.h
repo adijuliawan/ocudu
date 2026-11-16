@@ -36,6 +36,8 @@ public:
   rrc_cell_context               cell;     // current cell
   const rrc_ue_cfg_t             cfg;
   plmn_identity                  plmn_id = plmn_identity::test_value(); // PLMN identity of the UE
+  /// SNPN the UE selected in RRCSetupComplete, with the TAC the cell broadcasts for it. Empty for a PLMN UE.
+  std::optional<snpn_broadcast_info> selected_snpn;
   rrc_state                      state   = rrc_state::idle;
   std::optional<rrc_meas_cfg>    meas_cfg;
   std::optional<uint8_t>         serving_cell_mo;
@@ -65,5 +67,18 @@ public:
   std::vector<byte_buffer> pending_dl_nas_transport_messages;
   rrc_ue_logger&           logger;
 };
+
+/// \brief Reports a UE served in an SNPN by its SNPN: the TAC the cell broadcasts for the SNPN and its NID, TS 38.413,
+/// sec. 9.3.1.16. Leaves the location of a PLMN UE untouched.
+inline void apply_selected_snpn(const rrc_ue_context_t& context, cu_cp_user_location_info_nr& user_location_info)
+{
+  if (not context.selected_snpn.has_value()) {
+    return;
+  }
+  user_location_info.tai.tac = context.selected_snpn->tac;
+  // The broadcast TAC list belongs to the PLMN entry of the cell (NTN), not to the SNPN.
+  user_location_info.tac_list.clear();
+  user_location_info.nid = context.selected_snpn->snpn.nid;
+}
 
 } // namespace ocudu::ocucp
