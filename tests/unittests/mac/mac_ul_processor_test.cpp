@@ -302,6 +302,33 @@ TEST(mac_ul_processor, decode_ul_ccch_64bit)
   ASSERT_TRUE(t_bench.verify_du_ul_ccch_msg(ul_ccch_msg));
 }
 
+// Test that a Msg3 carrying the UL CCCH of a RedCap UE (LCID 35 for 48 bits, 36 for 64 bits, TS 38.321 Rel-17,
+// Table 6.2.1-2) reaches the DU manager like a legacy UL CCCH.
+TEST(mac_ul_processor, decode_ul_ccch_redcap)
+{
+  const std::vector<std::pair<uint8_t, std::vector<uint8_t>>> cases = {
+      {0x23, {0x1e, 0x4f, 0xc0, 0x04, 0xa6, 0x06}},
+      {0x24, {0x1e, 0x4f, 0xc0, 0x04, 0xa6, 0x06, 0x13, 0x54}}};
+
+  for (const auto& [subheader, sdu] : cases) {
+    du_cell_index_t cell_idx = to_du_cell_index(0U);
+    test_bench      t_bench(cell_idx);
+    rnti_t          tc_rnti = t_bench.allocate_tc_rnti();
+
+    byte_buffer payload = byte_buffer::create({subheader}).value();
+    ASSERT_TRUE(payload.append(sdu));
+    t_bench.send_rx_indication_msg(tc_rnti, payload);
+
+    struct ul_ccch_indication_message ul_ccch_msg{};
+    ul_ccch_msg.cell_index = cell_idx;
+    ul_ccch_msg.slot_rx    = slot_point{0, 1};
+    ul_ccch_msg.tc_rnti    = tc_rnti;
+    ASSERT_TRUE(ul_ccch_msg.subpdu.append(sdu));
+
+    ASSERT_TRUE(t_bench.verify_du_ul_ccch_msg(ul_ccch_msg)) << fmt::format("subheader={:#x}", subheader);
+  }
+}
+
 // Test UL MAC processing of RX indication message with MAC PDU for MAC CE Short BSR.
 TEST(mac_ul_processor, decode_short_bsr)
 {

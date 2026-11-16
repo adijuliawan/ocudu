@@ -24,9 +24,15 @@ public:
     // ...
     LCID32 = 32,
 
-    /// Codepoints this MAC does not handle: Reserved (37-42 and 47) or features not implemented.
+    /// Codepoints this MAC does not handle: extended LCIDs (33-34), Reserved (37-42 and 47) or features not
+    /// implemented. The RedCap CCCH codepoints (35-36) inside this range are accepted, see \c is_valid_lcid.
     MIN_UNSUPPORTED = 33,
     MAX_UNSUPPORTED = 51,
+
+    /// CCCH of 48 bits sent by a RedCap UE (35), TS 38.321 Rel-17, Table 6.2.1-2.
+    CCCH_SIZE_48_REDCAP = 0b100011,
+    /// CCCH of 64 bits sent by a RedCap UE (36), TS 38.321 Rel-17, Table 6.2.1-2.
+    CCCH_SIZE_64_REDCAP = 0b100100,
 
     /// Timing Advance Report (44), see TS 38.321, 6.1.3.56.
     TIMING_ADVANCE_REPORT = 0b101100,
@@ -62,8 +68,12 @@ public:
   explicit        operator underlying_type() const { return lcid_val; }
   underlying_type value() const { return lcid_val; }
 
-  /// Whether LCID belongs to CCCH
-  bool is_ccch() const { return (lcid_val == CCCH_SIZE_48 || lcid_val == CCCH_SIZE_64); }
+  /// Whether LCID belongs to CCCH, including the CCCH codepoints of a RedCap UE (TS 38.321, 6.2.1).
+  bool is_ccch() const
+  {
+    return lcid_val == CCCH_SIZE_48 or lcid_val == CCCH_SIZE_64 or lcid_val == CCCH_SIZE_48_REDCAP or
+           lcid_val == CCCH_SIZE_64_REDCAP;
+  }
 
   /// Whether LCID is an MAC CE
   bool is_ce() const
@@ -79,7 +89,7 @@ public:
   /// Returns false for the LCID values this MAC does not accept, see \c MIN_UNSUPPORTED.
   bool is_valid_lcid() const
   {
-    return lcid_val == TIMING_ADVANCE_REPORT or
+    return lcid_val == TIMING_ADVANCE_REPORT or lcid_val == CCCH_SIZE_48_REDCAP or lcid_val == CCCH_SIZE_64_REDCAP or
            (lcid_val <= PADDING and (lcid_val < MIN_UNSUPPORTED or lcid_val > MAX_UNSUPPORTED));
   }
 
@@ -108,8 +118,10 @@ public:
   {
     switch (lcid_val) {
       case CCCH_SIZE_48:
+      case CCCH_SIZE_48_REDCAP:
         return 6;
       case CCCH_SIZE_64:
+      case CCCH_SIZE_64_REDCAP:
         return 8;
       case CRNTI:
         return 2;

@@ -105,7 +105,7 @@ bool pdu_rx_handler::handle_rx_pdu(slot_point sl_rx, du_cell_index_t cell_index,
         // >> Dispatch continuation of subPDU handling to execution context of previous C-RNTI.
         return handle_crnti_ce(ctx, subpdu);
       }
-      if (subpdu.lcid() == lcid_ul_sch_t::CCCH_SIZE_48 or subpdu.lcid() == lcid_ul_sch_t::CCCH_SIZE_64) {
+      if (subpdu.lcid().is_ccch()) {
         return handle_ccch_msg(ctx, subpdu);
       }
     }
@@ -217,7 +217,9 @@ bool pdu_rx_handler::handle_mac_ce(const decoded_mac_rx_pdu& ctx, const mac_ul_s
   // Handle MAC CEs
   switch (subpdu.lcid().value()) {
     case lcid_ul_sch_t::CCCH_SIZE_48:
-    case lcid_ul_sch_t::CCCH_SIZE_64: {
+    case lcid_ul_sch_t::CCCH_SIZE_64:
+    case lcid_ul_sch_t::CCCH_SIZE_48_REDCAP:
+    case lcid_ul_sch_t::CCCH_SIZE_64_REDCAP: {
       // The CCCH CE is handled separately in case of Msg3, before all other CEs. See handle_rx_pdu().
       // At the point we enter this function, the CCCH should have been processed, and the UE should have been created.
       // Here, we only ensure that we are not receiving CCCH for a non-Msg3 PUSCH.

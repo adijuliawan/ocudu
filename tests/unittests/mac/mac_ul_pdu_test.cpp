@@ -359,6 +359,65 @@ TEST(mac_ul_subpdu, decode_single_entry_phr)
   fmt::print("subPDU: {}\n", subpdu);
 }
 
+// Test the unpacking of the UL CCCH of a RedCap UE, 48 bits (LCID 35, TS 38.321 Rel-17, Table 6.2.1-2).
+TEST(mac_ul_subpdu, decode_ul_ccch_48_redcap)
+{
+  mac_ul_sch_subpdu subpdu;
+
+  // R/LCID MAC subheader = R|R|LCID = 0x23  ->  LCID=35, no length field.
+  // MAC SDU (UL CCCH)    = {0x1e, 0x4f, 0xc0, 0x04, 0xa6, 0x06}  (Random 6B sequence)
+  byte_buffer msg = byte_buffer::create({0x23, 0x1e, 0x4f, 0xc0, 0x04, 0xa6, 0x06}).value();
+  ASSERT_TRUE(subpdu.unpack(msg));
+
+  ASSERT_EQ(subpdu.lcid(), lcid_ul_sch_t::CCCH_SIZE_48_REDCAP);
+  ASSERT_TRUE(subpdu.lcid().is_ccch());
+  ASSERT_EQ(6, subpdu.sdu_length()) << "Wrong SDU length for RedCap UL CCCH (6 bytes)";
+  ASSERT_EQ(7, subpdu.total_length()) << "Wrong subPDU length for RedCap UL CCCH (1 B header + 6B SDU)";
+  ASSERT_EQ(subpdu.payload(), byte_buffer_view(msg).view(1, subpdu.sdu_length()));
+  fmt::print("subPDU: {}\n", subpdu);
+}
+
+// Test the unpacking of the UL CCCH of a RedCap UE, 64 bits (LCID 36, TS 38.321 Rel-17, Table 6.2.1-2).
+TEST(mac_ul_subpdu, decode_ul_ccch_64_redcap)
+{
+  mac_ul_sch_subpdu subpdu;
+
+  // R/LCID MAC subheader = R|R|LCID = 0x24  ->  LCID=36, no length field.
+  // MAC SDU (UL CCCH)    = {0x1e, 0x4f, 0xc0, 0x04, 0xa6, 0x06, 0x13, 0x54}  (Random 8B sequence)
+  byte_buffer msg = byte_buffer::create({0x24, 0x1e, 0x4f, 0xc0, 0x04, 0xa6, 0x06, 0x13, 0x54}).value();
+  ASSERT_TRUE(subpdu.unpack(msg));
+
+  ASSERT_EQ(subpdu.lcid(), lcid_ul_sch_t::CCCH_SIZE_64_REDCAP);
+  ASSERT_TRUE(subpdu.lcid().is_ccch());
+  ASSERT_EQ(8, subpdu.sdu_length()) << "Wrong SDU length for RedCap UL CCCH (8 bytes)";
+  ASSERT_EQ(9, subpdu.total_length()) << "Wrong subPDU length for RedCap UL CCCH (1 B header + 8B SDU)";
+  ASSERT_EQ(subpdu.payload(), byte_buffer_view(msg).view(1, subpdu.sdu_length()));
+  fmt::print("subPDU: {}\n", subpdu);
+}
+
+// Test that only the RedCap CCCH codepoints are carved out of the unsupported range 33-51.
+TEST(mac_ul_subpdu, redcap_ccch_lcids_are_the_only_ccch_carve_out)
+{
+  for (unsigned lcid : {35U, 36U}) {
+    const lcid_ul_sch_t v{static_cast<uint8_t>(lcid)};
+    ASSERT_TRUE(v.is_valid_lcid()) << "lcid=" << lcid;
+    ASSERT_TRUE(v.is_ccch()) << "lcid=" << lcid;
+    ASSERT_FALSE(v.is_sdu()) << "lcid=" << lcid;
+    ASSERT_FALSE(v.is_ce()) << "lcid=" << lcid;
+    ASSERT_FALSE(v.has_length_field()) << "lcid=" << lcid;
+  }
+  // Extended LCIDs and the reserved codepoints next to the carve-out stay unsupported.
+  for (unsigned lcid : {33U, 34U, 37U, 38U, 42U, 47U, 51U}) {
+    const lcid_ul_sch_t v{static_cast<uint8_t>(lcid)};
+    ASSERT_FALSE(v.is_valid_lcid()) << "lcid=" << lcid;
+    ASSERT_FALSE(v.is_ccch()) << "lcid=" << lcid;
+  }
+  // An unsupported codepoint is still refused by the decoder.
+  mac_ul_sch_subpdu subpdu;
+  byte_buffer       msg = byte_buffer::create({0x25, 0x1e, 0x4f, 0xc0, 0x04, 0xa6, 0x06}).value();
+  ASSERT_FALSE(subpdu.unpack(msg));
+}
+
 // Test that LCID 44 is treated as a fixed size MAC CE, even though it sits inside the reserved range.
 TEST(mac_ul_subpdu, timing_advance_report_lcid_is_a_fixed_size_ce)
 {
