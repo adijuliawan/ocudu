@@ -83,20 +83,22 @@ void rrc_setup_procedure::operator()(coro_context<async_task<void>>& ctx)
 
   // Store selected PLMN in the RRC UE context and in the CU-CP UE.
   // Note: The selected PLMN starts at 1. TS 38.331, selectedPLMN-Identity: an index past the PLMN index values of
-  // plmn-IdentityInfoList selects an NPN of npn-IdentityInfoList, the PLMN index values coming first.
+  // plmn-IdentityInfoList selects an NPN of npn-IdentityInfoList, the PLMN index values coming first. In an NPN-only
+  // cell the PLMN entry takes no index value ("B is considered 0", npn-IdentityInfoList), so every index is an NPN.
   sel_plmn_id = rrc_setup_complete_msg.crit_exts.rrc_setup_complete().sel_plmn_id;
-  if (sel_plmn_id == 0 || sel_plmn_id > context.cell.plmn_identity_list.size() + context.cell.npn_list.size()) {
+  nof_plmn_index_values = context.cell.npn_only ? 0 : context.cell.plmn_identity_list.size();
+  if (sel_plmn_id == 0 || sel_plmn_id > nof_plmn_index_values + context.cell.npn_list.size()) {
     logger.log_warning("Invalid selected PLMN id {} in RRC Setup Complete", sel_plmn_id);
     metrics_notifier.on_failed_rrc_connection_establishment(establishment_fail_cause_t::network_reject);
     rrc_ue.on_ue_release_required(ngap_cause_radio_network_t::unspecified);
     CORO_EARLY_RETURN();
   }
 
-  if (sel_plmn_id <= context.cell.plmn_identity_list.size()) {
+  if (sel_plmn_id <= nof_plmn_index_values) {
     selected_plmn = context.cell.plmn_identity_list[sel_plmn_id - 1];
     context.selected_snpn.reset();
   } else {
-    const auto& npn = context.cell.npn_list[sel_plmn_id - 1 - context.cell.plmn_identity_list.size()];
+    const auto& npn = context.cell.npn_list[sel_plmn_id - 1 - nof_plmn_index_values];
     if (not npn.has_value()) {
       logger.log_warning("Selected PLMN id {} in RRC Setup Complete names an unsupported NPN", sel_plmn_id);
       metrics_notifier.on_failed_rrc_connection_establishment(establishment_fail_cause_t::network_reject);

@@ -99,6 +99,8 @@ private:
 
   asn1::rrc_nr::rrc_setup_complete_s rrc_setup_complete_msg;
   uint8_t                            sel_plmn_id   = 0;
+  /// PLMN index values of SIB1 before the first NPN index value: 0 in an NPN-only cell.
+  size_t nof_plmn_index_values = 0;
   plmn_identity                      selected_plmn = plmn_identity::test_value();
 };
 

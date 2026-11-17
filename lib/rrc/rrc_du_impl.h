@@ -137,10 +137,6 @@ public:
   rrc_du_metrics_collector&        get_rrc_du_metrics_collector() override { return metrics_aggregator; }
 
 private:
-  /// Reads the NPNs of SIB1 npn-IdentityInfoList, in NPN index order (TS 38.331, 6.3.2).
-  std::vector<std::optional<snpn_broadcast_info>> extract_npn_list(const asn1::rrc_nr::sib1_s& sib1,
-                                                                   nr_cell_identity            nci) const;
-
   // Helpers.
   const rrc_cfg_t cfg;
 

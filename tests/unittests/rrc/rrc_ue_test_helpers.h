@@ -62,6 +62,7 @@ struct rrc_ue_test_cell_params {
   tac_t tac = 7;
   /// NPNs of the cell's SIB1 npn-IdentityInfoList, in NPN index order.
   std::vector<std::optional<snpn_broadcast_info>> npn_list = {};
+  bool                                            npn_only = false;
 };
 
 /// Helper class to setup RRC UE for testing specific
@@ -117,6 +118,7 @@ protected:
     rrc_ue_create_msg.cell.plmn_identity_list.push_back(plmn_identity::test_value());
     rrc_ue_create_msg.cell.tac      = cell_params.tac;
     rrc_ue_create_msg.cell.npn_list = cell_params.npn_list;
+    rrc_ue_create_msg.cell.npn_only = cell_params.npn_only;
     rrc_ue_create_msg.cell.timers.t301 = test_t301;
 
     rrc_ue_cfg_t rrc_ue_cfg;

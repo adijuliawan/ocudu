@@ -50,6 +50,8 @@ struct rrc_cell_context {
   std::vector<plmn_identity> plmn_identity_list; ///< PLMN identities broadcasted in SIB1.
   /// NPNs broadcasted in SIB1 npn-IdentityInfoList, in NPN index order; empty entry for an unsupported PNI-NPN.
   std::vector<std::optional<snpn_broadcast_info>> npn_list;
+  /// NPN-only cell (TS 38.304, 5.3.1): its PLMN entry takes no index value, the NPN index values start at 1.
+  bool npn_only = false;
   /// Coarse UE location to TAC mapping of this cell, TS 38.413. Empty unless configured.
   ntn_location_mapping location_mapping;
 };

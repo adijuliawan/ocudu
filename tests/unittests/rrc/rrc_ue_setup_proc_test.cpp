@@ -189,6 +189,49 @@ TEST_F(rrc_ue_setup_snpn, when_ue_selects_the_snpn_then_uli_names_the_snpn_tac_a
   EXPECT_EQ(later_uli.nid->value(), 0x000007ed9d5U);
 }
 
+/// RRC UE on an NPN-only cell: the PLMN 00101 entry of SIB1 is the mandatory placeholder and takes no index value, so
+/// the SNPN 00101 + NID 000007ed9d5 (TAC 3) is index 1 (TS 38.331, npn-IdentityInfoList: "B is considered 0").
+class rrc_ue_setup_npn_only : public rrc_ue_test_helper, public ::testing::Test
+{
+protected:
+  static void SetUpTestSuite() { ocudulog::init(); }
+
+  void SetUp() override
+  {
+    rrc_ue_test_cell_params params;
+    params.tac = 1;
+    params.npn_list.emplace_back(snpn_broadcast_info{
+        {plmn_identity::test_value(), network_identifier::parse("000007ed9d5").value()}, 3});
+    params.npn_only = true;
+    init(params);
+
+    receive_setup_request();
+    ASSERT_EQ(get_srb0_pdu_type(), asn1::rrc_nr::dl_ccch_msg_type_c::c1_c_::types::rrc_setup);
+  }
+
+  void TearDown() override { ocudulog::flush(); }
+};
+
+TEST_F(rrc_ue_setup_npn_only, when_ue_selects_index_1_then_it_selects_the_snpn)
+{
+  receive_setup_complete_with_selected_plmn(1);
+
+  check_initial_ue_message_sent();
+  const auto& uli = rrc_ue_ngap_notifier.last_init_ue_uli;
+  ASSERT_TRUE(uli.has_value());
+  EXPECT_EQ(uli->tai.tac, 3U) << "index 1 of an NPN-only cell is its first NPN, not the placeholder PLMN";
+  ASSERT_TRUE(uli->nid.has_value());
+  EXPECT_EQ(uli->nid->value(), 0x000007ed9d5U);
+}
+
+TEST_F(rrc_ue_setup_npn_only, when_ue_selects_an_index_past_the_npns_then_ue_is_released)
+{
+  receive_setup_complete_with_selected_plmn(2);
+
+  ASSERT_FALSE(rrc_ue_ngap_notifier.initial_ue_msg_received);
+  check_ue_release_requested();
+}
+
 /// RRC UE on a shared cell whose SNPN has a PLMN ID of its own (MCC 999), not the PLMN of the cell.
 class rrc_ue_setup_snpn_own_plmn : public rrc_ue_test_helper, public ::testing::Test
 {

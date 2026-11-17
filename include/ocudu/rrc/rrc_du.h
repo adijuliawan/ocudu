@@ -28,6 +28,8 @@ struct rrc_cell_info {
   // > NPNs broadcasted in SIB1 npn-IdentityInfoList, in NPN index order (TS 38.331, 6.3.2). An entry is empty for a
   //   PNI-NPN (CAG), which is not supported.
   std::vector<std::optional<snpn_broadcast_info>> npn_list;
+  // > NPN-only cell (cellReservedForOtherUse with npn-IdentityInfoList): the NPN index values start at 1.
+  bool npn_only = false;
 };
 
 class rrc_du_cell_manager
