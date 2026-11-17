@@ -31,9 +31,13 @@ struct cell_access_related_info {
   std::vector<plmn_identity> additional_plmns;
   /// \brief SNPNs broadcast in \c npn-IdentityInfoList, TS 38.331, \c SIB1, each in its own \c NPN-IdentityInfo.
   ///
-  /// The cell stays a PLMN cell (shared cell): its PLMNs above keep \c cellReservedForOtherUse unset. The NPN index
-  /// of the i-th entry, used by \c selectedPLMN-Identity, is the number of PLMN identities plus i + 1.
+  /// Unless \c cell_reserved_for_other_use is set, the cell stays a PLMN cell (shared cell). The NPN index of the i-th
+  /// entry, used by \c selectedPLMN-Identity, is the number of PLMN identities plus i + 1.
   std::vector<snpn_broadcast_info> snpn_list;
+  /// \brief Sets \c cellReservedForOtherUse in SIB1 (TS 38.331), which with \c snpn_list makes the cell an NPN-only
+  /// cell: UEs in SNPN access mode may select it, every other UE treats it as barred (TS 38.304, 5.3.1). The PLMN
+  /// entry stays in SIB1, as \c plmn-IdentityInfoList is mandatory.
+  bool cell_reserved_for_other_use = false;
 };
 
 /// Cell reselection information common to all cell reselection types.

@@ -656,6 +656,7 @@ static void fill_si_acquisition_info(si_acquisition_info& si, const du_high_unit
     si.cell_acc_rel_info.snpn_list.push_back(snpn_broadcast_info{
         {plmn_identity::parse(snpn.plmn).value(), network_identifier::parse(snpn.nid).value()}, snpn.tac});
   }
+  si.cell_acc_rel_info.cell_reserved_for_other_use = cli_cfg.cell_reserved_for_other_use;
   // SI message config.
   si.si_config = make_si_sched_info_config(cli_cfg);
   // UE timers and constants config.

@@ -77,3 +77,68 @@ TEST_F(du_high_pusch_repetition_config_test, the_initial_transmission_counts_tow
   pusch_cfg().max_nof_harq_retxs = 2;
   ASSERT_FALSE(validate());
 }
+
+// An NPN-only cell (SIB1 cellReservedForOtherUse) needs an SNPN to serve: without npn-IdentityInfoList the flag bars
+// the cell for every UE, TS 38.304, 5.3.1.
+class du_high_snpn_config_test : public ::testing::Test
+{
+protected:
+  du_high_snpn_config_test() : app("du_high config validator test")
+  {
+    configure_cli11_with_du_high_config_schema(app, parsed_cfg);
+    app.parse("");
+    autoderive_du_high_parameters_after_parsing(parsed_cfg.config);
+  }
+
+  du_high_unit_base_cell_config& cell_cfg() { return parsed_cfg.config.cells_cfg.front().cell; }
+
+  bool validate() const { return validate_du_high_config(parsed_cfg.config); }
+
+  static du_high_unit_snpn_config lab_snpn()
+  {
+    du_high_unit_snpn_config snpn;
+    snpn.plmn = "00101";
+    snpn.nid  = "000007ed9d5";
+    snpn.tac  = 3;
+    return snpn;
+  }
+
+  CLI::App              app;
+  du_high_parsed_config parsed_cfg;
+};
+
+TEST_F(du_high_snpn_config_test, shared_cell_with_an_snpn_is_valid)
+{
+  cell_cfg().snpn_list.push_back(lab_snpn());
+  ASSERT_TRUE(validate());
+}
+
+TEST_F(du_high_snpn_config_test, npn_only_cell_with_an_snpn_is_valid)
+{
+  cell_cfg().snpn_list.push_back(lab_snpn());
+  cell_cfg().cell_reserved_for_other_use = true;
+  ASSERT_TRUE(validate());
+}
+
+TEST_F(du_high_snpn_config_test, npn_only_cell_without_an_snpn_is_rejected)
+{
+  cell_cfg().cell_reserved_for_other_use = true;
+  ASSERT_FALSE(validate());
+}
+
+TEST_F(du_high_snpn_config_test, snpn_configured_twice_is_rejected)
+{
+  cell_cfg().snpn_list.push_back(lab_snpn());
+  du_high_unit_snpn_config again = lab_snpn();
+  again.tac                      = 4;
+  cell_cfg().snpn_list.push_back(again);
+  ASSERT_FALSE(validate());
+}
+
+TEST_F(du_high_snpn_config_test, snpn_with_its_own_plmn_id_is_valid)
+{
+  du_high_unit_snpn_config snpn = lab_snpn();
+  snpn.plmn                     = "99970";
+  cell_cfg().snpn_list.push_back(snpn);
+  ASSERT_TRUE(validate());
+}

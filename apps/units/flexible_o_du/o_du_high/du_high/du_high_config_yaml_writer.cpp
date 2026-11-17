@@ -797,6 +797,9 @@ static YAML::Node build_cell_entry(const du_high_unit_base_cell_config& config)
     snpn_node["tac"]  = snpn.tac;
     node["snpn_list"].push_back(snpn_node);
   }
+  if (config.cell_reserved_for_other_use) {
+    node["cell_reserved_for_other_use"] = config.cell_reserved_for_other_use;
+  }
   node["tac"] = config.tac;
   if (!config.additional_tacs.empty()) {
     YAML::Node additional_tacs_node(YAML::NodeType::Sequence);

@@ -1942,6 +1942,11 @@ static bool validate_snpn_list(const du_high_unit_base_cell_config& config)
       }
     }
   }
+  // TS 38.304, 5.3.1: without an NPN list, cellReservedForOtherUse bars the cell for every UE.
+  if (config.cell_reserved_for_other_use and config.snpn_list.empty()) {
+    fmt::print("cell_reserved_for_other_use makes an NPN-only cell and requires a non-empty snpn_list.\n");
+    return false;
+  }
   return true;
 }
 

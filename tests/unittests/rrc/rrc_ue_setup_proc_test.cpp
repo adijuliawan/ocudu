@@ -189,6 +189,52 @@ TEST_F(rrc_ue_setup_snpn, when_ue_selects_the_snpn_then_uli_names_the_snpn_tac_a
   EXPECT_EQ(later_uli.nid->value(), 0x000007ed9d5U);
 }
 
+/// RRC UE on a shared cell whose SNPN has a PLMN ID of its own (MCC 999), not the PLMN of the cell.
+class rrc_ue_setup_snpn_own_plmn : public rrc_ue_test_helper, public ::testing::Test
+{
+protected:
+  static void SetUpTestSuite() { ocudulog::init(); }
+
+  void SetUp() override
+  {
+    rrc_ue_test_cell_params params;
+    params.tac = 7;
+    params.npn_list.emplace_back(
+        snpn_broadcast_info{{snpn_plmn, network_identifier::parse("000007ed9d5").value()}, 3});
+    init(params);
+
+    receive_setup_request();
+    ASSERT_EQ(get_srb0_pdu_type(), asn1::rrc_nr::dl_ccch_msg_type_c::c1_c_::types::rrc_setup);
+  }
+
+  void TearDown() override { ocudulog::flush(); }
+
+  const plmn_identity snpn_plmn = plmn_identity::parse("99970").value();
+};
+
+TEST_F(rrc_ue_setup_snpn_own_plmn, when_ue_selects_the_snpn_then_uli_names_the_snpn_plmn)
+{
+  receive_setup_complete_with_selected_plmn(2);
+
+  check_initial_ue_message_sent();
+  const auto& uli = rrc_ue_ngap_notifier.last_init_ue_uli;
+  ASSERT_TRUE(uli.has_value());
+  EXPECT_EQ(uli->tai.plmn_id, snpn_plmn);
+  EXPECT_EQ(uli->nr_cgi.plmn_id, snpn_plmn);
+  EXPECT_EQ(uli->tai.tac, 3U);
+  ASSERT_TRUE(uli->nid.has_value());
+  EXPECT_EQ(uli->nid->value(), 0x000007ed9d5U);
+
+  // A later ULI built from another PLMN, e.g. the GUAMI's, still names the SNPN.
+  cu_cp_user_location_info_nr later_uli;
+  later_uli.nr_cgi = {plmn_identity::test_value(), nr_cell_identity::create(0x66c000).value()};
+  later_uli.tai    = {plmn_identity::test_value(), 7};
+  rrc_ue->fill_ue_derived_location(later_uli);
+  EXPECT_EQ(later_uli.tai.plmn_id, snpn_plmn);
+  EXPECT_EQ(later_uli.nr_cgi.plmn_id, snpn_plmn);
+  EXPECT_EQ(later_uli.tai.tac, 3U);
+}
+
 TEST_F(rrc_ue_setup_snpn, when_ue_selects_an_unsupported_cag_entry_then_ue_is_released)
 {
   receive_setup_complete_with_selected_plmn(3);

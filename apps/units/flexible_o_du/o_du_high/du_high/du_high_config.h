@@ -1381,6 +1381,9 @@ struct du_high_unit_base_cell_config {
   std::vector<std::string> additional_plmns;
   /// SNPNs broadcast by the cell beside its PLMNs, in \c npn-IdentityInfoList (TS 38.331, SIB1).
   std::vector<du_high_unit_snpn_config> snpn_list;
+  /// Makes the cell an NPN-only cell: SIB1 \c cellReservedForOtherUse, so only UEs in SNPN access mode may select it.
+  /// Requires \c snpn_list.
+  bool cell_reserved_for_other_use = false;
   /// TAC.
   tac_t tac = 7;
   /// Additional TACs broadcast alongside \c tac in \c trackingAreaList, TS 38.331. NTN cells only; at most

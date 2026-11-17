@@ -75,7 +75,11 @@ inline void apply_selected_snpn(const rrc_ue_context_t& context, cu_cp_user_loca
   if (not context.selected_snpn.has_value()) {
     return;
   }
-  user_location_info.tai.tac = context.selected_snpn->tac;
+  // TS 38.413 sec. 9.3.1.16: the TAI and NR CGI of an SNPN UE name the SNPN's PLMN ID, which may differ from the
+  // PLMN of the cell, e.g. MCC 999.
+  user_location_info.tai.plmn_id    = context.selected_snpn->snpn.plmn;
+  user_location_info.nr_cgi.plmn_id = context.selected_snpn->snpn.plmn;
+  user_location_info.tai.tac        = context.selected_snpn->tac;
   // The broadcast TAC list belongs to the PLMN entry of the cell (NTN), not to the SNPN.
   user_location_info.tac_list.clear();
   user_location_info.nid = context.selected_snpn->snpn.nid;

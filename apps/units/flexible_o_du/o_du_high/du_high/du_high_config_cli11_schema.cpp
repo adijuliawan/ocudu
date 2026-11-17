@@ -2751,6 +2751,11 @@ static void configure_cli11_common_cell_args(CLI::App& app, du_high_unit_base_ce
   // SNPNs broadcast beside the PLMNs.
   add_option_object_list<du_high_unit_snpn_config>(
       app, "--snpn_list", cell_params.snpn_list, configure_cli11_snpn_args, "SNPNs broadcast by the cell");
+  add_option(app,
+             "--cell_reserved_for_other_use",
+             cell_params.cell_reserved_for_other_use,
+             "NPN-only cell: set SIB1 cellReservedForOtherUse, so only UEs in SNPN access mode select it")
+      ->capture_default_str();
 
   // Slicing configuration.
   add_option_object_list<du_high_unit_cell_slice_config>(

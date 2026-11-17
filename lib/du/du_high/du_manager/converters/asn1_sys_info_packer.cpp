@@ -419,6 +419,9 @@ static asn1::rrc_nr::sib1_s make_asn1_rrc_cell_sib1(const du_cell_config& du_cfg
     for (const snpn_broadcast_info& snpn : du_cfg.si.cell_acc_rel_info.snpn_list) {
       sib1.cell_access_related_info.npn_id_info_list_r16->push_back(make_asn1_snpn_id_info(snpn, du_cfg.nr_cgi.nci));
     }
+    // NPN-only cell (TS 38.304, 5.3.1): only UEs in SNPN access mode may select it. The MIB keeps cellBarred unset.
+    sib1.cell_access_related_info.cell_reserved_for_other_use_present =
+        du_cfg.si.cell_acc_rel_info.cell_reserved_for_other_use;
   }
 
   sib1.conn_est_fail_ctrl_present                   = true;

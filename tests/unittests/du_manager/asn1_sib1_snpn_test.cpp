@@ -91,6 +91,29 @@ TEST(asn1_sib1_snpn_test, shared_cell_broadcasts_plmn_and_snpn)
   EXPECT_EQ(snpn.nid_list_r16[0].to_number(), 0x000007ed9d5U);
 }
 
+TEST(asn1_sib1_snpn_test, npn_only_cell_sets_cell_reserved_for_other_use)
+{
+  du_cell_config cell_cfg = config_helpers::make_default_du_cell_config();
+  cell_cfg.tac            = 1;
+  cell_cfg.si.cell_acc_rel_info.snpn_list.push_back(make_lab_snpn());
+  cell_cfg.si.cell_acc_rel_info.cell_reserved_for_other_use = true;
+
+  asn1::rrc_nr::sib1_s sib1;
+  pack_and_unpack_sib1(cell_cfg, sib1);
+  const auto& access_info = sib1.cell_access_related_info;
+
+  EXPECT_TRUE(access_info.cell_reserved_for_other_use_present);
+  // The mandatory PLMN entry stays, with its TAC, beside the unchanged NPN entry.
+  ASSERT_EQ(access_info.plmn_id_info_list.size(), 1);
+  EXPECT_TRUE(access_info.plmn_id_info_list[0].tac_present);
+  EXPECT_EQ(access_info.plmn_id_info_list[0].tac.to_number(), 1U);
+  ASSERT_TRUE(access_info.npn_id_info_list_r16.is_present());
+  ASSERT_EQ(access_info.npn_id_info_list_r16->size(), 1);
+  EXPECT_EQ((*access_info.npn_id_info_list_r16)[0].tac_r16.to_number(), 3U);
+  EXPECT_EQ((*access_info.npn_id_info_list_r16)[0].npn_id_list_r16[0].snpn_r16().nid_list_r16[0].to_number(),
+            0x000007ed9d5U);
+}
+
 TEST(asn1_sib1_snpn_test, each_snpn_gets_its_own_entry)
 {
   du_cell_config cell_cfg = config_helpers::make_default_du_cell_config();
